@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var session = SessionStore()
+    @StateObject private var meetupStore = MeetupStore()
     @State private var selectedTab: String = {
         let argument = ProcessInfo.processInfo.arguments.first {
             $0.hasPrefix("--screenshot-tab=")
@@ -40,9 +41,13 @@ struct ContentView: View {
     }
 
     private func appTabs(for user: AppUser, screenshotPreview: Bool = false) -> some View {
-        TabView(selection: $selectedTab) {
+        let screenshotMeetupCreation = ProcessInfo.processInfo.arguments.contains("--screenshot-meetup-create")
+        return TabView(selection: $selectedTab) {
             NavigationStack {
-                HomeView()
+                HomeView(
+                    meetups: screenshotPreview ? MockData.meetups : meetupStore.meetups,
+                    isLoading: !screenshotPreview && meetupStore.isLoading
+                )
                     .toolbar { accountToolbar(user: user) }
             }
             .tabItem {
@@ -79,7 +84,12 @@ struct ContentView: View {
             .tag("friends")
 
             NavigationStack {
-                MeetupsView()
+                MeetupsView(
+                    meetups: screenshotPreview ? MockData.meetups : meetupStore.meetups,
+                    store: meetupStore,
+                    allowsCreation: !screenshotPreview || screenshotMeetupCreation,
+                    initiallyShowingCreateSheet: screenshotMeetupCreation
+                )
                     .toolbar { accountToolbar(user: user) }
             }
             .tabItem {
@@ -105,6 +115,10 @@ struct ContentView: View {
                 Label("추억", systemImage: "photo.on.rectangle")
             }
             .tag("memories")
+        }
+        .task(id: user.id) {
+            guard !screenshotPreview else { return }
+            await meetupStore.load(userID: user.id)
         }
     }
 
@@ -213,15 +227,6 @@ private struct FriendsView: View {
             FriendRow(friend: friend)
         }
         .navigationTitle("친구")
-    }
-}
-
-private struct MeetupsView: View {
-    var body: some View {
-        List(MockData.meetups) { meetup in
-            MeetupRow(meetup: meetup)
-        }
-        .navigationTitle("모임")
     }
 }
 

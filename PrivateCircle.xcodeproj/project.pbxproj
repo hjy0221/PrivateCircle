@@ -16,6 +16,7 @@
 		AA0000000000000000000007 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000007 /* GoogleService-Info.plist */; };
 		AA0000000000000000000008 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000008 /* AuthView.swift */; };
 		AA0000000000000000000009 /* GroupsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000009 /* GroupsView.swift */; };
+		AA0000000000000000000010 /* MeetupFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000010 /* MeetupFeature.swift */; };
 		AB0000000000000000000001 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = DD0000000000000000000001 /* FirebaseCore */; };
 		AB0000000000000000000002 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = DD0000000000000000000002 /* FirebaseAuth */; };
 		AB0000000000000000000003 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = DD0000000000000000000003 /* FirebaseFirestore */; };
@@ -32,6 +33,7 @@
 		BB0000000000000000000007 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		BB0000000000000000000008 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		BB0000000000000000000009 /* GroupsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupsView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000010 /* MeetupFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetupFeature.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -66,6 +68,7 @@
 				BB0000000000000000000005 /* HomeView.swift */,
 				BB0000000000000000000008 /* AuthView.swift */,
 				BB0000000000000000000009 /* GroupsView.swift */,
+				BB0000000000000000000010 /* MeetupFeature.swift */,
 				BB0000000000000000000006 /* Assets.xcassets */,
 				BB0000000000000000000007 /* GoogleService-Info.plist */,
 			);
@@ -165,6 +168,7 @@
 				AA0000000000000000000005 /* HomeView.swift in Sources */,
 				AA0000000000000000000008 /* AuthView.swift in Sources */,
 				AA0000000000000000000009 /* GroupsView.swift in Sources */,
+				AA0000000000000000000010 /* MeetupFeature.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

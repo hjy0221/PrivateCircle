@@ -1,22 +1,36 @@
 import SwiftUI
 
 struct HomeView: View {
-    private let nextMeetup = MockData.meetups.first { meetup in
-        meetup.confirmedTime.map { $0 > .now } ?? false
+    private let meetups: [Meetup]
+    private let isLoading: Bool
+    private var nextMeetup: Meetup? {
+        meetups.first { $0.confirmedTime.map { $0 > .now } ?? false }
     }
-    private let planningMeetups = MockData.meetups.filter { $0.status == .planning }
+    private var planningMeetups: [Meetup] { meetups.filter { $0.status == .planning } }
     private let recentMemory = MockData.memories.first
+
+    init(meetups: [Meetup] = MockData.meetups, isLoading: Bool = false) {
+        self.meetups = meetups
+        self.isLoading = isLoading
+    }
 
     var body: some View {
         List {
             Section("다가오는 모임") {
                 if let nextMeetup {
                     NextMeetupCard(meetup: nextMeetup)
+                } else if isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, alignment: .center)
                 } else {
                     ContentUnavailableView(
-                        "예정된 모임이 없어요",
+                        planningMeetups.isEmpty ? "아직 모임이 없어요" : "아직 확정된 약속이 없어요",
                         systemImage: "calendar",
-                        description: Text("친구들과 다음 약속을 정해 보세요.")
+                        description: Text(
+                            planningMeetups.isEmpty
+                                ? "친구들과 다음 약속을 만들어 보세요."
+                                : "아래에서 일정을 조율 중인 모임을 확인해 보세요."
+                        )
                     )
                 }
             }
@@ -116,6 +130,13 @@ struct MeetupRow: View {
 
             if let bestTime = meetup.bestSharedTime {
                 Label("모두 가능한 시간 · \(bestTime.formatted(date: .abbreviated, time: .shortened))", systemImage: "person.2")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if let firstCandidate = meetup.candidateTimes.map(\.startsAt).min() {
+                let extraCount = meetup.candidateTimes.count - 1
+                let candidateText = "후보 · \(firstCandidate.formatted(date: .abbreviated, time: .shortened))"
+                    + (extraCount > 0 ? " 외 \(extraCount)개" : "")
+                Label(candidateText, systemImage: "calendar")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -43,6 +43,33 @@ service cloud.firestore {
 
         allow update, delete: if false;
       }
+
+      match /meetups/{meetupId} {
+        allow get, list: if signedIn() && request.auth.uid == userId;
+
+        allow create: if signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly([
+            'title', 'participants', 'candidateTimes', 'location', 'status', 'ownerUID', 'createdAt'
+          ])
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 80
+          && request.resource.data.participants is list
+          && request.resource.data.participants.size() > 0
+          && request.resource.data.participants.size() <= 20
+          && request.resource.data.candidateTimes is list
+          && request.resource.data.candidateTimes.size() > 0
+          && request.resource.data.candidateTimes.size() <= 8
+          && request.resource.data.status == 'planning'
+          && request.resource.data.ownerUID == userId
+          && request.resource.data.createdAt == request.time
+          && (!('location' in request.resource.data.keys())
+            || (request.resource.data.location is string
+              && request.resource.data.location.size() <= 100));
+
+        allow update, delete: if false;
+      }
     }
 
     match /groups/{groupId} {

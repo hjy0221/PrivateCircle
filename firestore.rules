@@ -1,0 +1,127 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isGroupMember(groupId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+
+    function signedInEmail() {
+      return request.auth.token.email is string
+        ? request.auth.token.email.lower()
+        : '';
+    }
+
+    match /users/{userId} {
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['displayName', 'email', 'createdAt'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 80
+        && request.resource.data.email == signedInEmail()
+        && request.resource.data.createdAt == request.time;
+
+      allow get, list: if signedIn() && request.auth.uid == userId;
+      allow update, delete: if false;
+
+      match /groups/{groupId} {
+        allow get, list: if signedIn() && request.auth.uid == userId;
+        allow create: if signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['groupID', 'name', 'createdAt'])
+          && request.resource.data.groupID == groupId
+          && request.resource.data.name is string
+          && request.resource.data.createdAt == request.time
+          && existsAfter(/databases/$(database)/documents/groups/$(groupId)/members/$(userId))
+          && getAfter(/databases/$(database)/documents/groups/$(groupId)).data.name == request.resource.data.name;
+
+        allow update, delete: if false;
+      }
+    }
+
+    match /groups/{groupId} {
+      allow get: if isGroupMember(groupId);
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'createdBy', 'createdAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 50
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && existsAfter(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'owner';
+
+      allow update, delete: if false;
+
+      match /members/{memberId} {
+        allow get, list: if isGroupMember(groupId);
+
+        allow create: if signedIn()
+          && memberId == request.auth.uid
+          && request.resource.data.keys().hasOnly(['displayName', 'role', 'joinedAt', 'inviteId'])
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() > 0
+          && request.resource.data.displayName.size() <= 80
+          && request.resource.data.joinedAt == request.time
+          && existsAfter(/databases/$(database)/documents/groups/$(groupId))
+          && (
+            (request.resource.data.role == 'owner'
+              && !('inviteId' in request.resource.data.keys())
+              && getAfter(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid)
+            ||
+            (request.resource.data.role == 'member'
+              && request.resource.data.inviteId is string
+              && exists(/databases/$(database)/documents/groupInvites/$(request.resource.data.inviteId))
+              && get(/databases/$(database)/documents/groupInvites/$(request.resource.data.inviteId)).data.groupID == groupId
+              && get(/databases/$(database)/documents/groupInvites/$(request.resource.data.inviteId)).data.inviteeEmail == signedInEmail()
+              && get(/databases/$(database)/documents/groupInvites/$(request.resource.data.inviteId)).data.status == 'pending'
+              && getAfter(/databases/$(database)/documents/groupInvites/$(request.resource.data.inviteId)).data.status == 'accepted'
+              && getAfter(/databases/$(database)/documents/groupInvites/$(request.resource.data.inviteId)).data.acceptedByUID == request.auth.uid)
+          );
+
+        allow update, delete: if false;
+      }
+    }
+
+    match /groupInvites/{inviteId} {
+      allow get, list: if signedIn()
+        && resource.data.status == 'pending'
+        && resource.data.inviteeEmail == signedInEmail();
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'groupID', 'groupName', 'inviteeEmail', 'invitedByUID', 'inviterName', 'status', 'createdAt'
+        ])
+        && request.resource.data.groupID is string
+        && isGroupMember(request.resource.data.groupID)
+        && request.resource.data.groupName == get(/databases/$(database)/documents/groups/$(request.resource.data.groupID)).data.name
+        && request.resource.data.inviteeEmail is string
+        && request.resource.data.inviteeEmail.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && request.resource.data.inviteeEmail == request.resource.data.inviteeEmail.lower()
+        && request.resource.data.inviteeEmail != signedInEmail()
+        && request.resource.data.invitedByUID == request.auth.uid
+        && request.resource.data.inviterName is string
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if signedIn()
+        && resource.data.status == 'pending'
+        && resource.data.inviteeEmail == signedInEmail()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedByUID', 'acceptedAt'])
+        && request.resource.data.status == 'accepted'
+        && request.resource.data.acceptedByUID == request.auth.uid
+        && request.resource.data.acceptedAt == request.time
+        && existsAfter(/databases/$(database)/documents/groups/$(resource.data.groupID)/members/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/groups/$(resource.data.groupID)/members/$(request.auth.uid)).data.inviteId == inviteId;
+
+      allow delete: if false;
+    }
+  }
+}

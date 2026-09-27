@@ -2,9 +2,9 @@
 
 검토일: 2026-09-27
 
-검토 기준: `1119ae0` (`main`)
+검토 기준: `4cff4d3` (`main`)
 
-구현 상태 갱신: 2026-09-27. 참가자 UID별 모임 참조와 Meetup 단건 읽기 권한, 모임 당일 수동 도착 상태를 구현했다. Firestore Emulator 규칙 테스트 7개와 iOS Simulator Debug 빌드를 통과했다. 운영 Firebase 규칙 배포, 기존 공유 모임 참조 마이그레이션, 실제 Firebase 두 계정 end-to-end 검증은 아직 남아 있다.
+구현 상태 갱신: 2026-09-27. 참가자 UID별 모임 참조와 Meetup 단건 읽기 권한, 모임 당일 수동 도착 상태를 구현했다. Firestore Emulator 규칙 테스트 7개와 iOS Simulator Debug 빌드를 통과했다. Firebase Console에서 앱 설정과 같은 `uri-sai-a8c73` 프로젝트를 읽기 전용 확인했다. 배포 Rules는 로컬보다 오래되어 보이고 이메일 확인 검사가 없는 것으로 확인했으나, 운영 배포는 하지 않았다. Console의 Auth 사용자 수는 1명이며 공유 그룹·Meetup 데이터가 보이지 않아 실제 A/B 검증과 migration 대상은 아직 없다.
 
 ## 먼저 수정할 사항
 
@@ -128,6 +128,8 @@ SwiftUI, NavigationStack, Form, Sheet, SF Symbols와 소규모 ObservableObject 
 
 기존에 생성된 공유 Meetup에는 참가자별 참조 문서가 없을 수 있어 출시 데이터에 대한 안전한 backfill/migration이 필요하다. 실제 사용자 테스트 전에는 다른 그룹 사용자·이메일 미확인 계정 접근, 그룹 탈퇴·멤버 제외·초대 취소 시 멤버십과 참조 문서 및 권한 정리를 추가 검증한다. 신규 모임 생성, 참가자/비참가자/외부 사용자 접근, availability 응답, 작성자 확정, 도착 상태 권한 및 Emulator realtime listener는 검증했다. 실제 Firebase 두 계정의 기기 간 동작은 아직 확인하지 않았다.
 
+2026-09-27 Firebase Console 읽기 전용 조사에서는 최상위 `users` 외에 공유 `groups` 컬렉션과 `sharedMeetupRefs` 하위 컬렉션이 관찰되지 않았고, Auth 사용자도 1명이었다. 따라서 현재 운영 데이터에 backfill을 실행하지 않는다. 향후 기존 Meetup이 발견되면 Admin SDK migration을 기본 dry-run으로 설계한다: 각 `groups/{groupID}/meetups/{meetupID}`의 `participantUIDs`를 읽고, 각 UID가 실제 그룹 멤버인지 검증한 뒤, 결정적 ID `{groupID}_{meetupID}`인 `users/{uid}/sharedMeetupRefs` 문서가 없는 경우에만 생성한다. 기존 reference와 Meetup 원본은 수정하지 않고, 프로젝트 ID를 명시하며, dry-run 결과를 검토한 뒤에만 별도 `--apply` 단계로 실행한다. 현재 저장소에는 이 스크립트를 추가하지 않았으며 실제 대상 데이터가 나타날 때 Emulator fixture로 먼저 검증한다.
+
 ## 파일 구성 개선
 
 기능을 수정하는 시점에 필요한 파일만 나눈다. Xcode 프로젝트의 소스 등록도 함께 갱신한다.
@@ -147,7 +149,7 @@ SwiftUI, NavigationStack, Form, Sheet, SF Symbols와 소규모 ObservableObject 
 | --- | --- | --- |
 | 1 | 가입 실패 복구, 계정별 상태 수명(R2~R3), 중복 초대(R4), 규칙 검증(R1) | Emulator·두 계정에서 가입/초대/계정 전환 검증, 운영 규칙 배포 |
 | 2 | 가입 복구·중복 초대, 실제 두 계정 검증, 일정 확정 알림 | 인증·초대·계정 전환이 복구 가능하고 실제 계정에서 확정 일정이 재로그인 후에도 표시 |
-| 3 | 도착 상태 실제 Firebase 두 계정 확인 | A/B 계정 간 갱신 확인 및 운영 규칙 배포 후 비참가자·타인 상태 접근 거부 확인 |
+| 3 | 운영 Rules 배포 및 실제 Firebase 두 계정 확인 | 최신 규칙 배포, 두 verified 계정 간 일정·도착 상태 동기화, 재로그인 보존과 비참가자 차단 확인 |
 | 4 | 공동 사진과 자동 추억 | Storage 규칙, 동의·삭제, 실패 재시도, 모임별 재조회 확인 |
 | 5 | 안전·개인정보·계정 관리 | 차단·신고, 계정/데이터 삭제, 개인정보 처리방침 및 지원 동선 |
 | 6 | 출시 품질과 TestFlight | 접근성·다크 모드·오프라인·성능·크래시·기기별 확인, 심사 메타데이터 완료 |
@@ -156,7 +158,8 @@ SwiftUI, NavigationStack, Form, Sheet, SF Symbols와 소규모 ObservableObject 
 
 ## 출시 전 차단 항목
 
-- **Firebase 규칙 배포와 기존 데이터**: 로컬 `firestore.rules`는 이메일 인증, 참가자 전용 Meetup/availability/arrival states를 포함하며 Emulator 테스트를 통과했다. 운영 프로젝트에는 아직 게시하지 않았다. 기존 공유 Meetup에 참가자별 `sharedMeetupRefs`를 생성하는 마이그레이션도 필요하다.
+- **Firebase 규칙 배포와 기존 데이터**: 로컬 `firestore.rules`는 이메일 인증, 참가자 전용 Meetup/availability/arrival states를 포함하며 Emulator 테스트를 통과했다. 운영 `uri-sai-a8c73`에는 오래된 Rules가 게시된 것으로 보여 이메일 인증 등 로컬 경계와 다르다. `.firebaserc`가 프로젝트 ID를 고정하지만 CLI 인증이 없어 배포하지 않았다. 현재 공유 데이터가 관찰되지 않아 backfill은 불필요하다. 추후 대상이 생기면 위 dry-run/`--apply` 절차와 기존 reference 보존을 지킨다.
+- **실제 계정 검증**: Firebase Auth 사용자가 1명뿐이다. 두 번째 이메일 인증 완료 계정이 준비되기 전에는 A/B 초대·일정·arrival 상태와 재로그인 end-to-end 검증이 불가능하다.
 - **계정·개인정보**: 앱 안 계정 삭제와 데이터 삭제, 개인정보 처리방침, 보관 기간, 사진 메타데이터(EXIF/위치) 처리 및 도착 상태의 동의 범위를 정의해야 한다.
 - **커뮤니티 안전**: 그룹 초대 남용 방지, 사용자 차단·신고·탈퇴, 잘못된 사진 신고/삭제 절차를 추가한다.
 - **사진 백엔드**: Firebase Storage 경로별 접근 규칙, 업로드 실패·재시도, 썸네일/용량 정책, 사진 삭제 시 추억 정합성은 미구현이다.
@@ -169,7 +172,7 @@ SwiftUI, NavigationStack, Form, Sheet, SF Symbols와 소규모 ObservableObject 
 
 ## 검증과 운영 준비
 
-현재 앱 테스트 타깃과 운영 배포 설정은 없다. 이번 단계에서 `firebase.json`과 Firestore Rules Unit Testing 기반을 추가했다. 소스의 `firestore.rules`와 실제 게시된 규칙의 일치 여부는 별도로 확인해야 한다. 운영 상태를 조회하거나 규칙을 배포하지 않았다.
+현재 앱 테스트 타깃은 없다. `firebase.json`과 Firestore Rules Unit Testing 기반이 있다. 2026-09-27 Firebase Console에서 대상 프로젝트와 Firestore Rules / 데이터 구조 / Auth 계정 수를 읽기 전용 확인했다. 로컬 `firestore.rules`와 게시된 규칙은 일치하지 않으며 Firebase CLI는 로그인되어 있지 않다. `.firebaserc`에 앱의 프로젝트 ID를 지정했지만 운영 Rules는 배포하지 않았다.
 
 수정과 함께 다음 검증을 추가한다.
 

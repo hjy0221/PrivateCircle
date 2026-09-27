@@ -51,7 +51,7 @@
 
 ## 현재 구현 범위
 
-Firebase 이메일 인증과 Firestore 그룹 생성·이메일 초대, 참가자 선택형 공동 모임, 참가자별 일정 응답·실시간 동기화·작성자 일정 확정, 모임 당일 수동 도착 상태 공유가 구현되어 있습니다. Firestore Emulator 규칙 테스트 7개와 iOS Simulator Debug 빌드가 통과했습니다. 실제 Firebase 두 계정 확인, 운영 규칙 배포, 기존 공유 Meetup 참조 마이그레이션은 아직 필요합니다. GPS 추적은 하지 않습니다. 친구 목록과 추억은 실제 데이터에 연결되지 않았으며 공동 사진 업로드, 자동 추억, 알림, 계정 삭제와 출시 운영 기능은 후속 MVP 작업입니다.
+Firebase 이메일 인증과 Firestore 그룹 생성·이메일 초대, 참가자 선택형 공동 모임, 참가자별 일정 응답·실시간 동기화·작성자 일정 확정, 모임 당일 수동 도착 상태 공유가 구현되어 있습니다. Firestore Emulator 규칙 테스트 7개와 iOS Simulator Debug 빌드가 통과했습니다. Firebase Console에서 앱 설정과 같은 `uri-sai-a8c73` 프로젝트를 확인했지만, 게시된 Rules는 로컬보다 오래된 버전이며 이메일 확인 조건이 없는 것으로 확인했습니다. 운영 Rules는 아직 게시하지 않았고 Firebase CLI 로그인도 되어 있지 않습니다. 읽기 전용 데이터 확인에서는 공유 그룹·모임이 발견되지 않아 현재 migration 대상은 없습니다. Auth 계정이 하나뿐이라 실제 A/B 검증은 두 번째 이메일 인증 완료 계정이 준비될 때까지 미완료입니다. GPS 추적은 하지 않습니다. 친구 목록과 추억은 실제 데이터에 연결되지 않았으며 공동 사진 업로드, 자동 추억, 알림, 계정 삭제와 출시 운영 기능은 후속 MVP 작업입니다.
 
 ## 실행
 
@@ -59,4 +59,4 @@ Firebase 이메일 인증과 Firestore 그룹 생성·이메일 초대, 참가�
 2. `PrivateCircle` 스킴과 iOS 시뮬레이터 또는 연결된 기기를 선택합니다.
 3. 빌드 후 실행합니다.
 
-Firebase 기능을 사용하려면 프로젝트에 맞는 `GoogleService-Info.plist`와 Firebase Console 설정이 필요합니다. 공동 모임·응답·확정 흐름을 실제 계정에서 사용하기 전에 대상 Firebase 프로젝트를 확인한 뒤 `firestore.rules`를 게시하고, 기존 공유 Meetup의 참가자 참조를 마이그레이션해야 합니다. 저장소의 규칙이 운영 환경에 자동 배포되지는 않습니다. 규칙 테스트는 `npm run test:rules`로 실행합니다.
+Firebase 기능을 사용하려면 프로젝트에 맞는 `GoogleService-Info.plist`와 Firebase Console 설정이 필요합니다. 기본 Firebase 프로젝트는 `.firebaserc`에 고정되어 있습니다. 운영 Rules를 게시하기 전 `npm run test:rules`와 대상 프로젝트를 다시 확인하고, Firebase CLI 로그인 후 `npm run deploy:rules:production`을 명시적으로 실행합니다. 이 저장소의 Rules는 자동 배포되지 않습니다. 현재 운영 데이터에서 그룹·공동 모임이 발견되지 않아 migration은 불필요하며, 과거 레코드가 확인될 경우 참가자 검증 및 기존 참조 보존을 포함하는 idempotent backfill 절차를 먼저 dry-run으로 수행해야 합니다.

@@ -149,7 +149,7 @@ SwiftUI, NavigationStack, Form, Sheet, SF Symbols와 소규모 ObservableObject 
 | --- | --- | --- |
 | 1 | 가입 실패 복구, 계정별 상태 수명(R2~R3), 중복 초대(R4), 규칙 검증(R1) | Emulator·두 계정에서 가입/초대/계정 전환 검증, 운영 규칙 배포 |
 | 2 | 가입 복구·중복 초대, 실제 두 계정 검증, 일정 확정 알림 | 인증·초대·계정 전환이 복구 가능하고 실제 계정에서 확정 일정이 재로그인 후에도 표시 |
-| 3 | 운영 Rules 배포 및 실제 Firebase 두 계정 확인 | 최신 규칙 배포, 두 verified 계정 간 일정·도착 상태 동기화, 재로그인 보존과 비참가자 차단 확인 |
+| 3 | 실제 Firebase 두 계정 확인 | 두 verified 계정 간 초대·일정·도착 상태 동기화, 재로그인 보존과 비참가자 차단 확인 |
 | 4 | 공동 사진과 자동 추억 | Storage 규칙, 동의·삭제, 실패 재시도, 모임별 재조회 확인 |
 | 5 | 안전·개인정보·계정 관리 | 차단·신고, 계정/데이터 삭제, 개인정보 처리방침 및 지원 동선 |
 | 6 | 출시 품질과 TestFlight | 접근성·다크 모드·오프라인·성능·크래시·기기별 확인, 심사 메타데이터 완료 |
@@ -158,7 +158,7 @@ SwiftUI, NavigationStack, Form, Sheet, SF Symbols와 소규모 ObservableObject 
 
 ## 출시 전 차단 항목
 
-- **Firebase 규칙 배포와 기존 데이터**: 로컬 `firestore.rules`는 이메일 인증, 참가자 전용 Meetup/availability/arrival states를 포함하며 Emulator 테스트를 통과했다. 운영 `uri-sai-a8c73`에는 오래된 Rules가 게시된 것으로 보여 이메일 인증 등 로컬 경계와 다르다. `.firebaserc`가 프로젝트 ID를 고정하지만 CLI 인증이 없어 배포하지 않았다. 현재 공유 데이터가 관찰되지 않아 backfill은 불필요하다. 추후 대상이 생기면 위 dry-run/`--apply` 절차와 기존 reference 보존을 지킨다.
+- **Firebase 규칙 배포와 기존 데이터**: 로컬 `firestore.rules`는 이메일 인증, 참가자 전용 Meetup/availability/arrival states를 포함한다. 2026-09-28 Emulator 테스트 7개 통과 후 운영 `uri-sai-a8c73`에 배포했고, 게시 Rules와 로컬 파일의 일치를 검증했다. 운영 Firestore에는 공유 그룹·Meetup/reference가 없어 backfill은 실행하지 않았다. 추후 기존 대상이 발견되면 위 dry-run/`--apply` 절차와 기존 reference 보존을 지킨다.
 - **실제 계정 검증**: Firebase Auth 사용자가 1명뿐이다. 두 번째 이메일 인증 완료 계정이 준비되기 전에는 A/B 초대·일정·arrival 상태와 재로그인 end-to-end 검증이 불가능하다.
 - **계정·개인정보**: 앱 안 계정 삭제와 데이터 삭제, 개인정보 처리방침, 보관 기간, 사진 메타데이터(EXIF/위치) 처리 및 도착 상태의 동의 범위를 정의해야 한다.
 - **커뮤니티 안전**: 그룹 초대 남용 방지, 사용자 차단·신고·탈퇴, 잘못된 사진 신고/삭제 절차를 추가한다.
@@ -172,7 +172,7 @@ SwiftUI, NavigationStack, Form, Sheet, SF Symbols와 소규모 ObservableObject 
 
 ## 검증과 운영 준비
 
-현재 앱 테스트 타깃은 없다. `firebase.json`과 Firestore Rules Unit Testing 기반이 있다. 2026-09-27 Firebase Console에서 대상 프로젝트와 Firestore Rules / 데이터 구조 / Auth 계정 수를 읽기 전용 확인했다. 로컬 `firestore.rules`와 게시된 규칙은 일치하지 않으며 Firebase CLI는 로그인되어 있지 않다. 기본 CLI 설정 폴더가 현재 사용자에게 쓰기 불가여서 로그인과 배포 명령은 저장소 밖의 별도 쓰기 가능 경로를 사용한다. `.firebaserc`에 앱의 프로젝트 ID를 지정했지만 운영 Rules는 배포하지 않았다.
+현재 앱 테스트 타깃은 없다. `firebase.json`과 Firestore Rules Unit Testing 기반이 있다. 2026-09-28 Firebase Console에서 `uri-sai-a8c73`의 데이터와 Authentication 계정을 다시 확인했다. Auth 사용자는 1명이고 Firestore에는 `users` 외 공유 그룹·Meetup 데이터가 없어 migration을 실행하지 않았다. CLI 인증 후 운영 Firestore Rules를 배포했으며 `npm run verify:rules:production`이 게시 Rules와 `firestore.rules`의 일치를 확인했다. 이번 작업의 iOS Simulator Debug 빌드와 Rules 테스트 7개도 통과했다. 두 번째 verified 계정이 아직 없어 초대부터 일정·arrival 실시간 동기화, 재로그인 보존, 비참가자 차단의 실제 A/B 검증은 남아 있다. 기본 CLI 설정 폴더가 현재 사용자에게 쓰기 불가하여 로그인·배포·검증 명령은 저장소 밖의 쓰기 가능한 별도 경로를 사용한다.
 
 수정과 함께 다음 검증을 추가한다.
 

@@ -18,7 +18,10 @@ enum ProfileColor: String, Hashable {
 struct Meetup: Identifiable, Hashable {
     let id: UUID
     var groupID: String? = nil
+    var ownerID: String? = nil
     var myAvailableCandidateIDs: Set<String> = []
+    var submittedAvailabilityIDs: Set<String> = []
+    var confirmedCandidateID: String? = nil
     var title: String
     var participants: [Friend]
     var candidateTimes: [MeetupTimeOption]

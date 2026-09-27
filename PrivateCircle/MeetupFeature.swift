@@ -12,6 +12,8 @@ final class MeetupStore: ObservableObject {
     private let database = Firestore.firestore()
     private var userID: String?
     private var loadRevision = 0
+    private var realtimeListeners: [String: [ListenerRegistration]] = [:]
+    private var availabilityChoicesByMeetup: [String: [String: Set<String>]] = [:]
 
     init(userID: String? = nil) {
         self.userID = userID
@@ -21,6 +23,8 @@ final class MeetupStore: ObservableObject {
         loadRevision += 1
         let revision = loadRevision
         if self.userID != userID {
+            stopListening()
+            availabilityChoicesByMeetup = [:]
             meetups = []
             self.userID = userID
         }
@@ -36,42 +40,26 @@ final class MeetupStore: ObservableObject {
         do {
             let personalSnapshot = try await database.collection("users").document(userID)
                 .collection("meetups").getDocuments()
-            let memberships = try await database.collection("users").document(userID)
-                .collection("groups").getDocuments()
+            let sharedMeetupReferences = try await database.collection("users").document(userID)
+                .collection("sharedMeetupRefs").getDocuments()
             guard loadRevision == revision, self.userID == userID, !Task.isCancelled else { return }
 
             var loadedMeetups = personalSnapshot.documents.compactMap { Self.decode($0) }
-            for membership in memberships.documents {
-                let groupID = membership.documentID
-                let groupSnapshot = try await database.collection("groups").document(groupID)
-                    .collection("meetups").getDocuments()
+            for referenceDocument in sharedMeetupReferences.documents {
+                guard let groupID = referenceDocument.data()["groupID"] as? String,
+                      let meetupID = referenceDocument.data()["meetupID"] as? String else { continue }
+                let document = try await database.collection("groups").document(groupID)
+                    .collection("meetups").document(meetupID).getDocument()
                 guard loadRevision == revision, self.userID == userID, !Task.isCancelled else { return }
-                for document in groupSnapshot.documents {
-                    guard var meetup = Self.decode(document, groupID: groupID) else { continue }
-                    let responseSnapshot = try await document.reference.collection("availability").getDocuments()
-                    guard loadRevision == revision, self.userID == userID, !Task.isCancelled else { return }
-                    var availableUsersByCandidate: [String: Set<String>] = [:]
-                    var myAvailableCandidateIDs = Set<String>()
-                    for response in responseSnapshot.documents {
-                        let responseData = response.data()
-                        guard let candidateIDs = responseData["availableCandidateIDs"] as? [String] else { continue }
-                        for candidateID in candidateIDs {
-                            availableUsersByCandidate[candidateID, default: []].insert(response.documentID)
-                        }
-                        if response.documentID == userID {
-                            myAvailableCandidateIDs = Set(candidateIDs)
-                        }
-                    }
-                    meetup.candidateTimes = meetup.candidateTimes.map { option in
-                        MeetupTimeOption(
-                            id: option.id,
-                            startsAt: option.startsAt,
-                            availableFriendIDs: availableUsersByCandidate[option.id, default: []]
-                        )
-                    }
-                    meetup.myAvailableCandidateIDs = myAvailableCandidateIDs
-                    loadedMeetups.append(meetup)
-                }
+                guard var meetup = Self.decode(document, groupID: groupID),
+                      meetup.participants.contains(where: { $0.id == userID }) else { continue }
+                let responseSnapshot = try await document.reference.collection("availability").getDocuments()
+                guard loadRevision == revision, self.userID == userID, !Task.isCancelled else { return }
+                let choices = Self.decodeAvailability(responseSnapshot)
+                let key = Self.key(groupID: groupID, meetupID: meetup.id.uuidString)
+                availabilityChoicesByMeetup[key] = choices
+                meetup = applyingAvailability(choices, to: meetup)
+                loadedMeetups.append(meetup)
             }
 
             meetups = loadedMeetups.sorted { Self.sortDate(for: $0) < Self.sortDate(for: $1) }
@@ -84,6 +72,69 @@ final class MeetupStore: ObservableObject {
     func reload() async {
         guard let userID else { return }
         await load(userID: userID)
+    }
+
+    func startRealtimeUpdates(for meetup: Meetup) {
+        guard let userID,
+              let groupID = meetup.groupID,
+              meetup.participants.contains(where: { $0.id == userID }) else { return }
+
+        let key = Self.key(groupID: groupID, meetupID: meetup.id.uuidString)
+        stopRealtimeUpdates(key: key)
+        let reference = database.collection("groups").document(groupID)
+            .collection("meetups").document(meetup.id.uuidString)
+
+        let meetupListener = reference.addSnapshotListener { [weak self] snapshot, error in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      self.userID == userID,
+                      self.realtimeListeners[key] != nil else { return }
+                if let error {
+                    self.loadErrorMessage = error.localizedDescription
+                    return
+                }
+                guard let snapshot, let decoded = Self.decode(snapshot, groupID: groupID) else { return }
+                let choices = self.availabilityChoicesByMeetup[key] ?? [:]
+                self.upsert(self.applyingAvailability(choices, to: decoded))
+            }
+        }
+
+        let availabilityListener = reference.collection("availability").addSnapshotListener { [weak self] snapshot, error in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      self.userID == userID,
+                      self.realtimeListeners[key] != nil else { return }
+                if let error {
+                    self.loadErrorMessage = error.localizedDescription
+                    return
+                }
+                guard let snapshot,
+                      let current = self.meetups.first(where: { $0.groupID == groupID && $0.id == meetup.id }) else { return }
+                let choices = Self.decodeAvailability(snapshot)
+                self.availabilityChoicesByMeetup[key] = choices
+                self.upsert(self.applyingAvailability(choices, to: current))
+            }
+        }
+        realtimeListeners[key] = [meetupListener, availabilityListener]
+    }
+
+    func stopRealtimeUpdates(for meetup: Meetup) {
+        guard let groupID = meetup.groupID else { return }
+        stopRealtimeUpdates(key: Self.key(groupID: groupID, meetupID: meetup.id.uuidString))
+    }
+
+    func stopListening() {
+        realtimeListeners.values.flatMap { $0 }.forEach { $0.remove() }
+        realtimeListeners.removeAll()
+    }
+
+    func isOwner(of meetup: Meetup) -> Bool {
+        guard let userID else { return false }
+        return meetup.ownerID == userID
+    }
+
+    func isCurrentUser(_ friend: Friend) -> Bool {
+        friend.id == userID
     }
 
     func create(
@@ -130,6 +181,7 @@ final class MeetupStore: ObservableObject {
 
         let meetup = Meetup(
             id: meetupID,
+            ownerID: userID,
             title: cleanTitle,
             participants: participants,
             candidateTimes: candidateDates.sorted().map {
@@ -157,6 +209,7 @@ final class MeetupStore: ObservableObject {
         let cleanLocation = location.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty, cleanTitle.count <= 80,
               !participants.isEmpty, participants.count <= 20,
+              Set(participants.map(\.id)).count == participants.count,
               participants.contains(where: { $0.id == userID }),
               !candidateDates.isEmpty, candidateDates.count <= 8,
               cleanLocation.count <= 100 else {
@@ -185,13 +238,25 @@ final class MeetupStore: ObservableObject {
             data["location"] = cleanLocation
         }
 
-        try await database.collection("groups").document(groupID)
+        let meetupReference = database.collection("groups").document(groupID)
             .collection("meetups").document(meetupID.uuidString)
-            .setData(data)
+        let batch = database.batch()
+        batch.setData(data, forDocument: meetupReference)
+        for participant in participants {
+            let participantReference = database.collection("users").document(participant.id)
+                .collection("sharedMeetupRefs").document(Self.referenceID(groupID: groupID, meetupID: meetupID.uuidString))
+            batch.setData([
+                "groupID": groupID,
+                "meetupID": meetupID.uuidString,
+                "createdAt": FieldValue.serverTimestamp()
+            ], forDocument: participantReference)
+        }
+        try await batch.commit()
 
         meetups.append(Meetup(
             id: meetupID,
             groupID: groupID,
+            ownerID: userID,
             title: cleanTitle,
             participants: participants,
             candidateTimes: candidateOptions.map {
@@ -209,8 +274,9 @@ final class MeetupStore: ObservableObject {
     func saveAvailability(for meetup: Meetup, candidateIDs: Set<String>) async throws {
         guard let userID,
               let groupID = meetup.groupID,
-              meetup.participants.contains(where: { $0.id == userID }) else {
-            throw MeetupStoreError.notSignedIn
+              meetup.participants.contains(where: { $0.id == userID }),
+              meetup.status == .planning else {
+            throw meetup.status == .planning ? MeetupStoreError.notSignedIn : MeetupStoreError.notPlanning
         }
         let allowedCandidateIDs = Set(meetup.candidateTimes.map(\.id))
         guard candidateIDs.isSubset(of: allowedCandidateIDs) else {
@@ -228,21 +294,38 @@ final class MeetupStore: ObservableObject {
                 "updatedAt": FieldValue.serverTimestamp()
             ])
 
+        var choices = availabilityChoicesByMeetup[Self.key(groupID: groupID, meetupID: meetup.id.uuidString)] ?? [:]
+        choices[userID] = candidateIDs
+        availabilityChoicesByMeetup[Self.key(groupID: groupID, meetupID: meetup.id.uuidString)] = choices
+        guard let index = meetups.firstIndex(where: { $0.id == meetup.id && $0.groupID == groupID }) else { return }
+        meetups[index] = applyingAvailability(choices, to: meetups[index])
+    }
+
+    func confirmSchedule(for meetup: Meetup, candidateID: String) async throws {
+        guard let userID,
+              let groupID = meetup.groupID,
+              meetup.ownerID == userID,
+              meetup.status == .planning,
+              let candidate = meetup.candidateTimes.first(where: { $0.id == candidateID }) else {
+            throw MeetupStoreError.cannotConfirm
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+
+        try await database.collection("groups").document(groupID)
+            .collection("meetups").document(meetup.id.uuidString)
+            .updateData([
+                "status": "confirmed",
+                "confirmedCandidateID": candidateID,
+                "confirmedAt": FieldValue.serverTimestamp()
+            ])
+
         guard let index = meetups.firstIndex(where: { $0.id == meetup.id && $0.groupID == groupID }) else { return }
         var updatedMeetup = meetups[index]
-        updatedMeetup.myAvailableCandidateIDs = candidateIDs
-        updatedMeetup.candidateTimes = updatedMeetup.candidateTimes.map { option in
-            var availableFriendIDs = option.availableFriendIDs
-            availableFriendIDs.remove(userID)
-            if candidateIDs.contains(option.id) {
-                availableFriendIDs.insert(userID)
-            }
-            return MeetupTimeOption(
-                id: option.id,
-                startsAt: option.startsAt,
-                availableFriendIDs: availableFriendIDs
-            )
-        }
+        updatedMeetup.status = .confirmed
+        updatedMeetup.confirmedCandidateID = candidateID
+        updatedMeetup.confirmedTime = candidate.startsAt
         meetups[index] = updatedMeetup
     }
 
@@ -259,8 +342,16 @@ final class MeetupStore: ObservableObject {
     }
 
     private static func decode(_ document: QueryDocumentSnapshot, groupID: String? = nil) -> Meetup? {
-        let data = document.data()
-        guard let id = UUID(uuidString: document.documentID),
+        decode(documentID: document.documentID, data: document.data(), groupID: groupID)
+    }
+
+    private static func decode(_ document: DocumentSnapshot, groupID: String? = nil) -> Meetup? {
+        guard let data = document.data() else { return nil }
+        return decode(documentID: document.documentID, data: data, groupID: groupID)
+    }
+
+    private static func decode(documentID: String, data: [String: Any], groupID: String?) -> Meetup? {
+        guard let id = UUID(uuidString: documentID),
               let title = data["title"] as? String,
               let participantData = data["participants"] as? [[String: Any]],
               let candidateValues = data["candidateTimes"] as? [Any] else {
@@ -281,19 +372,70 @@ final class MeetupStore: ObservableObject {
         guard !participants.isEmpty else { return nil }
         let candidateTimes = candidateValues.compactMap(Self.decodeCandidateTime)
         guard !candidateTimes.isEmpty else { return nil }
+        let confirmedCandidateID = data["confirmedCandidateID"] as? String
+        let status: MeetupStatus = (data["status"] as? String) == "confirmed" ? .confirmed : .planning
 
         return Meetup(
             id: id,
             groupID: groupID ?? data["groupID"] as? String,
+            ownerID: data["ownerUID"] as? String,
+            confirmedCandidateID: confirmedCandidateID,
             title: title,
             participants: participants,
             candidateTimes: candidateTimes,
-            confirmedTime: nil,
+            confirmedTime: candidateTimes.first(where: { $0.id == confirmedCandidateID })?.startsAt,
             location: data["location"] as? String,
-            status: .planning,
+            status: status,
             arrivalStates: [],
             moments: []
         )
+    }
+
+    private static func decodeAvailability(_ snapshot: QuerySnapshot) -> [String: Set<String>] {
+        snapshot.documents.reduce(into: [:]) { result, document in
+            guard let candidateIDs = document.data()["availableCandidateIDs"] as? [String] else { return }
+            result[document.documentID] = Set(candidateIDs)
+        }
+    }
+
+    private static func key(groupID: String, meetupID: String) -> String {
+        "\(groupID)/\(meetupID)"
+    }
+
+    private static func referenceID(groupID: String, meetupID: String) -> String {
+        "\(groupID)_\(meetupID)"
+    }
+
+    private func applyingAvailability(_ choices: [String: Set<String>], to meetup: Meetup) -> Meetup {
+        var updatedMeetup = meetup
+        updatedMeetup.submittedAvailabilityIDs = Set(choices.keys)
+        if let userID {
+            updatedMeetup.myAvailableCandidateIDs = choices[userID] ?? []
+        }
+        updatedMeetup.candidateTimes = meetup.candidateTimes.map { option in
+            let availableIDs = Set(choices.compactMap { userID, candidateIDs in
+                candidateIDs.contains(option.id) ? userID : nil
+            })
+            return MeetupTimeOption(
+                id: option.id,
+                startsAt: option.startsAt,
+                availableFriendIDs: availableIDs
+            )
+        }
+        return updatedMeetup
+    }
+
+    private func upsert(_ meetup: Meetup) {
+        if let index = meetups.firstIndex(where: { $0.id == meetup.id && $0.groupID == meetup.groupID }) {
+            meetups[index] = meetup
+        } else {
+            meetups.append(meetup)
+        }
+        meetups.sort { Self.sortDate(for: $0) < Self.sortDate(for: $1) }
+    }
+
+    private func stopRealtimeUpdates(key: String) {
+        realtimeListeners.removeValue(forKey: key)?.forEach { $0.remove() }
     }
 
     private static func decodeCandidateTime(_ value: Any) -> MeetupTimeOption? {
@@ -319,6 +461,8 @@ final class MeetupStore: ObservableObject {
 private enum MeetupStoreError: LocalizedError {
     case notSignedIn
     case incomplete
+    case notPlanning
+    case cannotConfirm
 
     var errorDescription: String? {
         switch self {
@@ -326,6 +470,10 @@ private enum MeetupStoreError: LocalizedError {
             "로그인한 뒤 모임을 만들 수 있어요."
         case .incomplete:
             "모임 이름, 친구, 후보 시간을 확인해 주세요."
+        case .notPlanning:
+            "일정 조율 중인 모임만 응답할 수 있어요."
+        case .cannotConfirm:
+            "모임 만든 사람만 후보 일정을 확정할 수 있어요."
         }
     }
 }
@@ -449,6 +597,8 @@ struct MeetupDetailView: View {
     @State private var selectedCandidateIDs: Set<String>
     @State private var errorMessage: String?
     @State private var didSave = false
+    @State private var candidateToConfirm: MeetupTimeOption?
+    @State private var showingConfirmDialog = false
 
     init(meetup: Meetup, store: MeetupStore) {
         self.meetup = meetup
@@ -468,7 +618,13 @@ struct MeetupDetailView: View {
                 if let location = currentMeetup.location {
                     Label(location, systemImage: "mappin.and.ellipse")
                 }
-                if let bestSharedTime = currentMeetup.bestSharedTime {
+                if currentMeetup.status == .confirmed, let confirmedTime = currentMeetup.confirmedTime {
+                    Label(
+                        "확정 · \(confirmedTime.formatted(date: .complete, time: .shortened))",
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .foregroundStyle(.green)
+                } else if let bestSharedTime = currentMeetup.bestSharedTime {
                     Label(
                         "모두 가능한 시간 · \(bestSharedTime.formatted(date: .abbreviated, time: .shortened))",
                         systemImage: "checkmark.circle.fill"
@@ -479,17 +635,34 @@ struct MeetupDetailView: View {
                 Text(currentMeetup.title)
             }
 
-            if currentMeetup.groupID != nil {
+            if currentMeetup.groupID != nil && currentMeetup.status == .planning {
                 Section {
                     ForEach(currentMeetup.candidateTimes.sorted { $0.startsAt < $1.startsAt }) { option in
-                        Toggle(isOn: candidateBinding(for: option.id)) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(option.startsAt.formatted(date: .complete, time: .shortened))
-                                Text("가능 \(option.availableFriendIDs.count) / \(currentMeetup.participants.count)명")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Toggle(isOn: candidateBinding(for: option.id)) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(option.startsAt.formatted(date: .complete, time: .shortened))
+                                    Text("가능 \(option.availableFriendIDs.count) / \(currentMeetup.participants.count)명 · 응답 대기 \(pendingCount(for: currentMeetup))명")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    if !availableNames(for: option).isEmpty {
+                                        Text("가능: \(availableNames(for: option))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+
+                            if store.isOwner(of: currentMeetup) {
+                                Button("이 시간으로 확정", systemImage: "checkmark.circle") {
+                                    candidateToConfirm = option
+                                    showingConfirmDialog = true
+                                }
+                                .font(.subheadline)
+                                .disabled(store.isWorking)
                             }
                         }
+                        .padding(.vertical, 4)
                     }
 
                     if didSave {
@@ -500,7 +673,16 @@ struct MeetupDetailView: View {
                 } header: {
                     Text("가능한 시간")
                 } footer: {
-                    Text("참여 가능한 시간을 모두 선택해 주세요. 선택하지 않은 시간은 어렵다는 응답으로 저장됩니다.")
+                    Text("참여 가능한 시간을 선택해 저장해 주세요. 응답은 이 모임 참가자에게만 보여요.")
+                }
+            } else if currentMeetup.groupID != nil {
+                Section("일정 확정") {
+                    if let confirmedTime = currentMeetup.confirmedTime {
+                        LabeledContent("날짜", value: confirmedTime.formatted(date: .complete, time: .shortened))
+                        Text("모임 만든 사람이 일정을 확정했어요.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             } else {
                 Section {
@@ -514,7 +696,7 @@ struct MeetupDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await store.reload() }
         .toolbar {
-            if currentMeetup.groupID != nil {
+            if currentMeetup.groupID != nil && currentMeetup.status == .planning {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("응답 저장") { saveAvailability() }
                         .disabled(store.isWorking)
@@ -529,6 +711,18 @@ struct MeetupDetailView: View {
         } message: {
             Text(errorMessage ?? "잠시 후 다시 시도해 주세요.")
         }
+        .confirmationDialog("이 후보로 약속을 확정할까요?", isPresented: $showingConfirmDialog, titleVisibility: .visible) {
+            if let candidateToConfirm {
+                Button("\(candidateToConfirm.startsAt.formatted(date: .abbreviated, time: .shortened))로 확정") {
+                    confirm(candidateToConfirm)
+                }
+            }
+            Button("취소", role: .cancel) { candidateToConfirm = nil }
+        } message: {
+            Text("확정하면 참가자 모두의 일정 응답이 종료됩니다.")
+        }
+        .onAppear { store.startRealtimeUpdates(for: meetup) }
+        .onDisappear { store.stopRealtimeUpdates(for: meetup) }
         .onChange(of: currentMeetup.myAvailableCandidateIDs) { _, newValue in
             selectedCandidateIDs = newValue
         }
@@ -558,6 +752,29 @@ struct MeetupDetailView: View {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    private func confirm(_ option: MeetupTimeOption) {
+        Task {
+            do {
+                try await store.confirmSchedule(for: currentMeetup, candidateID: option.id)
+                candidateToConfirm = nil
+                errorMessage = nil
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func pendingCount(for meetup: Meetup) -> Int {
+        meetup.participants.count - meetup.submittedAvailabilityIDs.intersection(Set(meetup.participants.map(\.id))).count
+    }
+
+    private func availableNames(for option: MeetupTimeOption) -> String {
+        currentMeetup.participants
+            .filter { option.availableFriendIDs.contains($0.id) }
+            .map(\.name)
+            .joined(separator: " · ")
     }
 }
 
@@ -604,6 +821,7 @@ struct CreateMeetupSheet: View {
             && title.count <= 80
             && location.count <= 100
             && !selectedFriendIDs.isEmpty
+            && (groupID == nil || participants.contains { selectedFriendIDs.contains($0.id) && store.isCurrentUser($0) })
             && candidateDates.count <= 8
             && !candidateDates.isEmpty
             && !store.isWorking
@@ -630,24 +848,14 @@ struct CreateMeetupSheet: View {
 
                 Section {
                     ForEach(participants) { friend in
-                        if groupID == nil {
-                            friendSelectionRow(friend)
-                        } else {
-                            HStack(spacing: 12) {
-                                InitialsAvatar(friend: friend)
-                                Text(friend.name)
-                                Spacer()
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.tint)
-                            }
-                        }
+                        friendSelectionRow(friend)
                     }
                 } header: {
                     Text("함께할 친구")
                 } footer: {
                     Text(groupID == nil
                         ? "샘플 화면에서만 사용하는 친구예요. 실제 앱에서는 저장·초대되지 않습니다."
-                        : "현재 그룹 멤버 모두에게 공유되는 모임입니다.")
+                        : "선택한 멤버만 모임을 보고 일정에 응답할 수 있어요. 만든 사람은 항상 포함됩니다.")
                 }
 
                 Section {
@@ -686,7 +894,7 @@ struct CreateMeetupSheet: View {
                 } header: {
                     Text("일정 후보")
                 } footer: {
-                    Text("최대 8개까지 추가할 수 있어요. 실제 공통 시간 투표는 다음 단계에서 연결됩니다.")
+                    Text("최대 8개까지 후보를 추가할 수 있어요. 참가자별 응답을 모아 시간을 정합니다.")
                 }
             }
             .navigationTitle("새 모임")
@@ -713,7 +921,9 @@ struct CreateMeetupSheet: View {
 
     private func friendSelectionRow(_ friend: Friend) -> some View {
         let isSelected = selectedFriendIDs.contains(friend.id)
+        let isCurrentUser = groupID != nil && store.isCurrentUser(friend)
         return Button {
+            guard !isCurrentUser else { return }
             if isSelected {
                 selectedFriendIDs.remove(friend.id)
             } else {
@@ -731,6 +941,7 @@ struct CreateMeetupSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(isCurrentUser)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 

@@ -151,7 +151,11 @@ struct MeetupRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            if let bestTime = meetup.bestSharedTime {
+            if meetup.status == .confirmed, let confirmedTime = meetup.confirmedTime {
+                Label("확정 · \(confirmedTime.formatted(date: .abbreviated, time: .shortened))", systemImage: "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if let bestTime = meetup.bestSharedTime {
                 Label("모두 가능한 시간 · \(bestTime.formatted(date: .abbreviated, time: .shortened))", systemImage: "person.2")
                     .font(.caption)
                     .foregroundStyle(.secondary)

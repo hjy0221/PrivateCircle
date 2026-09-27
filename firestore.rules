@@ -15,6 +15,14 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
     }
 
+    function isMeetupParticipant(groupId, meetupId) {
+      let meetupPath = /databases/$(database)/documents/groups/$(groupId)/meetups/$(meetupId);
+      return isGroupMember(groupId)
+        && exists(meetupPath)
+        && get(meetupPath).data.participantUIDs is list
+        && get(meetupPath).data.participantUIDs.hasAny([request.auth.uid]);
+    }
+
     function signedInEmail() {
       return request.auth.token.email is string
         ? request.auth.token.email.lower()
@@ -44,6 +52,24 @@ service cloud.firestore {
           && request.resource.data.createdAt == request.time
           && existsAfter(/databases/$(database)/documents/groups/$(groupId)/members/$(userId))
           && getAfter(/databases/$(database)/documents/groups/$(groupId)).data.name == request.resource.data.name;
+
+        allow update, delete: if false;
+      }
+
+      match /sharedMeetupRefs/{referenceId} {
+        allow get, list: if verifiedUser() && request.auth.uid == userId;
+
+        allow create: if verifiedUser()
+          && request.resource.data.keys().hasOnly(['groupID', 'meetupID', 'createdAt'])
+          && request.resource.data.groupID is string
+          && request.resource.data.meetupID is string
+          && referenceId == request.resource.data.groupID + '_' + request.resource.data.meetupID
+          && request.resource.data.createdAt == request.time
+          && exists(/databases/$(database)/documents/groups/$(request.resource.data.groupID)/members/$(userId))
+          && existsAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupID)/meetups/$(request.resource.data.meetupID))
+          && getAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupID)/meetups/$(request.resource.data.meetupID)).data.groupID == request.resource.data.groupID
+          && getAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupID)/meetups/$(request.resource.data.meetupID)).data.ownerUID == request.auth.uid
+          && getAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupID)/meetups/$(request.resource.data.meetupID)).data.participantUIDs.hasAny([userId]);
 
         allow update, delete: if false;
       }
@@ -92,7 +118,8 @@ service cloud.firestore {
       allow update, delete: if false;
 
       match /meetups/{meetupId} {
-        allow get, list: if isGroupMember(groupId);
+        allow get: if isMeetupParticipant(groupId, meetupId);
+        allow list: if false;
 
         allow create: if isGroupMember(groupId)
           && request.resource.data.keys().hasOnly([
@@ -109,6 +136,7 @@ service cloud.firestore {
           && request.resource.data.participantUIDs is list
           && request.resource.data.participantUIDs.size() > 0
           && request.resource.data.participantUIDs.size() <= 20
+          && request.resource.data.participantUIDs.size() == request.resource.data.participants.size()
           && request.resource.data.participantUIDs.hasAll([request.auth.uid])
           && request.resource.data.candidateIDs is list
           && request.resource.data.candidateIDs.size() > 0
@@ -124,13 +152,24 @@ service cloud.firestore {
             || (request.resource.data.location is string
               && request.resource.data.location.size() <= 100));
 
-        allow update, delete: if false;
+        allow update: if isMeetupParticipant(groupId, meetupId)
+          && resource.data.ownerUID == request.auth.uid
+          && resource.data.status == 'planning'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'confirmedCandidateID', 'confirmedAt'
+          ])
+          && request.resource.data.status == 'confirmed'
+          && request.resource.data.confirmedCandidateID is string
+          && resource.data.candidateIDs.hasAny([request.resource.data.confirmedCandidateID])
+          && request.resource.data.confirmedAt == request.time;
+        allow delete: if false;
 
         match /availability/{userId} {
-          allow get, list: if isGroupMember(groupId);
+          allow get, list: if isMeetupParticipant(groupId, meetupId);
 
-          allow create, update: if isGroupMember(groupId)
+          allow create, update: if isMeetupParticipant(groupId, meetupId)
             && userId == request.auth.uid
+            && get(/databases/$(database)/documents/groups/$(groupId)/meetups/$(meetupId)).data.status == 'planning'
             && request.resource.data.keys().hasOnly(['availableCandidateIDs', 'updatedAt'])
             && request.resource.data.availableCandidateIDs is list
             && request.resource.data.availableCandidateIDs.size() <= 8

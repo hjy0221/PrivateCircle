@@ -7,11 +7,20 @@ struct HomeView: View {
         meetups.first { $0.confirmedTime.map { $0 > .now } ?? false }
     }
     private var planningMeetups: [Meetup] { meetups.filter { $0.status == .planning } }
-    private let recentMemory = MockData.memories.first
+    private let friends: [Friend]
+    private let recentMemory: Memory?
+    private let showsSampleContent: Bool
 
-    init(meetups: [Meetup] = MockData.meetups, isLoading: Bool = false) {
+    init(
+        meetups: [Meetup] = MockData.meetups,
+        isLoading: Bool = false,
+        showsSampleContent: Bool = false
+    ) {
         self.meetups = meetups
         self.isLoading = isLoading
+        self.showsSampleContent = showsSampleContent
+        self.friends = showsSampleContent ? MockData.friends : []
+        self.recentMemory = showsSampleContent ? MockData.memories.first : nil
     }
 
     var body: some View {
@@ -43,9 +52,11 @@ struct HomeView: View {
                 }
             }
 
-            Section("친구") {
-                ForEach(MockData.friends) { friend in
-                    FriendRow(friend: friend)
+            if showsSampleContent {
+                Section("친구") {
+                    ForEach(friends) { friend in
+                        FriendRow(friend: friend)
+                    }
                 }
             }
 
@@ -92,19 +103,25 @@ struct NextMeetupCard: View {
                     .foregroundStyle(.primary)
             }
 
-            HStack(spacing: -6) {
-                ForEach(meetup.participants) { friend in
-                    InitialsAvatar(friend: friend)
-                }
-
-                Spacer()
-
-                Text("친구 \(meetup.participants.count)명")
-                    .font(.subheadline)
+            if meetup.groupID == nil {
+                Label("개인 초안 · 나만 볼 수 있어요", systemImage: "lock.fill")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
+            } else {
+                HStack(spacing: -6) {
+                    ForEach(meetup.participants) { friend in
+                        InitialsAvatar(friend: friend)
+                    }
+
+                    Spacer()
+
+                    Text("친구 \(meetup.participants.count)명")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(meetup.participants.map(\.name).joined(separator: ", "))
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(meetup.participants.map(\.name).joined(separator: ", "))
         }
         .padding(.vertical, 8)
     }
@@ -124,9 +141,15 @@ struct MeetupRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text(meetup.participants.map(\.name).joined(separator: " · "))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            if meetup.groupID == nil {
+                Label("개인 초안 · 나만 볼 수 있어요", systemImage: "lock.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(meetup.participants.map(\.name).joined(separator: " · "))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
 
             if let bestTime = meetup.bestSharedTime {
                 Label("모두 가능한 시간 · \(bestTime.formatted(date: .abbreviated, time: .shortened))", systemImage: "person.2")
@@ -217,6 +240,6 @@ struct MemoryRow: View {
 
 #Preview {
     NavigationStack {
-        HomeView()
+        HomeView(showsSampleContent: true)
     }
 }

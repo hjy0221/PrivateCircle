@@ -6,29 +6,84 @@ final class MeetupStore: ObservableObject {
     @Published private(set) var meetups: [Meetup] = []
     @Published private(set) var isLoading = true
     @Published private(set) var isWorking = false
+    @Published private(set) var loadErrorMessage: String?
     @Published var errorMessage: String?
 
     private let database = Firestore.firestore()
     private var userID: String?
+    private var loadRevision = 0
+
+    init(userID: String? = nil) {
+        self.userID = userID
+    }
 
     func load(userID: String) async {
+        loadRevision += 1
+        let revision = loadRevision
         if self.userID != userID {
             meetups = []
             self.userID = userID
         }
 
         isLoading = true
-        defer { isLoading = false }
+        loadErrorMessage = nil
+        defer {
+            if loadRevision == revision {
+                isLoading = false
+            }
+        }
 
         do {
-            let snapshot = try await database.collection("users").document(userID)
+            let personalSnapshot = try await database.collection("users").document(userID)
                 .collection("meetups").getDocuments()
-            meetups = snapshot.documents.compactMap(Self.decode)
-                .sorted { Self.sortDate(for: $0) < Self.sortDate(for: $1) }
-            errorMessage = nil
+            let memberships = try await database.collection("users").document(userID)
+                .collection("groups").getDocuments()
+            guard loadRevision == revision, self.userID == userID, !Task.isCancelled else { return }
+
+            var loadedMeetups = personalSnapshot.documents.compactMap { Self.decode($0) }
+            for membership in memberships.documents {
+                let groupID = membership.documentID
+                let groupSnapshot = try await database.collection("groups").document(groupID)
+                    .collection("meetups").getDocuments()
+                guard loadRevision == revision, self.userID == userID, !Task.isCancelled else { return }
+                for document in groupSnapshot.documents {
+                    guard var meetup = Self.decode(document, groupID: groupID) else { continue }
+                    let responseSnapshot = try await document.reference.collection("availability").getDocuments()
+                    guard loadRevision == revision, self.userID == userID, !Task.isCancelled else { return }
+                    var availableUsersByCandidate: [String: Set<String>] = [:]
+                    var myAvailableCandidateIDs = Set<String>()
+                    for response in responseSnapshot.documents {
+                        let responseData = response.data()
+                        guard let candidateIDs = responseData["availableCandidateIDs"] as? [String] else { continue }
+                        for candidateID in candidateIDs {
+                            availableUsersByCandidate[candidateID, default: []].insert(response.documentID)
+                        }
+                        if response.documentID == userID {
+                            myAvailableCandidateIDs = Set(candidateIDs)
+                        }
+                    }
+                    meetup.candidateTimes = meetup.candidateTimes.map { option in
+                        MeetupTimeOption(
+                            id: option.id,
+                            startsAt: option.startsAt,
+                            availableFriendIDs: availableUsersByCandidate[option.id, default: []]
+                        )
+                    }
+                    meetup.myAvailableCandidateIDs = myAvailableCandidateIDs
+                    loadedMeetups.append(meetup)
+                }
+            }
+
+            meetups = loadedMeetups.sorted { Self.sortDate(for: $0) < Self.sortDate(for: $1) }
         } catch {
-            errorMessage = error.localizedDescription
+            guard loadRevision == revision, self.userID == userID, !Task.isCancelled else { return }
+            loadErrorMessage = error.localizedDescription
         }
+    }
+
+    func reload() async {
+        guard let userID else { return }
+        await load(userID: userID)
     }
 
     func create(
@@ -50,7 +105,7 @@ final class MeetupStore: ObservableObject {
         let meetupID = UUID()
         let participantData: [[String: Any]] = participants.map { friend in
             [
-                "id": friend.id.uuidString,
+                "id": friend.id,
                 "name": friend.name,
                 "initials": friend.initials,
                 "profileColor": friend.profileColor.rawValue,
@@ -78,7 +133,7 @@ final class MeetupStore: ObservableObject {
             title: cleanTitle,
             participants: participants,
             candidateTimes: candidateDates.sorted().map {
-                MeetupTimeOption(id: UUID(), startsAt: $0, availableFriendIDs: [])
+                MeetupTimeOption(id: UUID().uuidString, startsAt: $0, availableFriendIDs: [])
             },
             confirmedTime: nil,
             location: cleanLocation.isEmpty ? nil : cleanLocation,
@@ -90,21 +145,133 @@ final class MeetupStore: ObservableObject {
         meetups.sort { Self.sortDate(for: $0) < Self.sortDate(for: $1) }
     }
 
-    private static func decode(_ document: QueryDocumentSnapshot) -> Meetup? {
+    func createShared(
+        groupID: String,
+        title: String,
+        participants: [Friend],
+        candidateDates: [Date],
+        location: String
+    ) async throws {
+        guard let userID else { throw MeetupStoreError.notSignedIn }
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanLocation = location.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty, cleanTitle.count <= 80,
+              !participants.isEmpty, participants.count <= 20,
+              participants.contains(where: { $0.id == userID }),
+              !candidateDates.isEmpty, candidateDates.count <= 8,
+              cleanLocation.count <= 100 else {
+            throw MeetupStoreError.incomplete
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+
+        let meetupID = UUID()
+        let sortedDates = candidateDates.sorted()
+        let candidateOptions = sortedDates.map { (id: UUID().uuidString, date: $0) }
+        let participantData = Self.encode(participants)
+        var data: [String: Any] = [
+            "groupID": groupID,
+            "title": cleanTitle,
+            "participants": participantData,
+            "participantUIDs": participants.map(\.id),
+            "candidateIDs": candidateOptions.map(\.id),
+            "candidateTimes": candidateOptions.map { ["id": $0.id, "startsAt": Timestamp(date: $0.date)] as [String: Any] },
+            "status": "planning",
+            "ownerUID": userID,
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+        if !cleanLocation.isEmpty {
+            data["location"] = cleanLocation
+        }
+
+        try await database.collection("groups").document(groupID)
+            .collection("meetups").document(meetupID.uuidString)
+            .setData(data)
+
+        meetups.append(Meetup(
+            id: meetupID,
+            groupID: groupID,
+            title: cleanTitle,
+            participants: participants,
+            candidateTimes: candidateOptions.map {
+                MeetupTimeOption(id: $0.id, startsAt: $0.date, availableFriendIDs: [])
+            },
+            confirmedTime: nil,
+            location: cleanLocation.isEmpty ? nil : cleanLocation,
+            status: .planning,
+            arrivalStates: [],
+            moments: []
+        ))
+        meetups.sort { Self.sortDate(for: $0) < Self.sortDate(for: $1) }
+    }
+
+    func saveAvailability(for meetup: Meetup, candidateIDs: Set<String>) async throws {
+        guard let userID,
+              let groupID = meetup.groupID,
+              meetup.participants.contains(where: { $0.id == userID }) else {
+            throw MeetupStoreError.notSignedIn
+        }
+        let allowedCandidateIDs = Set(meetup.candidateTimes.map(\.id))
+        guard candidateIDs.isSubset(of: allowedCandidateIDs) else {
+            throw MeetupStoreError.incomplete
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+
+        try await database.collection("groups").document(groupID)
+            .collection("meetups").document(meetup.id.uuidString)
+            .collection("availability").document(userID)
+            .setData([
+                "availableCandidateIDs": candidateIDs.sorted(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ])
+
+        guard let index = meetups.firstIndex(where: { $0.id == meetup.id && $0.groupID == groupID }) else { return }
+        var updatedMeetup = meetups[index]
+        updatedMeetup.myAvailableCandidateIDs = candidateIDs
+        updatedMeetup.candidateTimes = updatedMeetup.candidateTimes.map { option in
+            var availableFriendIDs = option.availableFriendIDs
+            availableFriendIDs.remove(userID)
+            if candidateIDs.contains(option.id) {
+                availableFriendIDs.insert(userID)
+            }
+            return MeetupTimeOption(
+                id: option.id,
+                startsAt: option.startsAt,
+                availableFriendIDs: availableFriendIDs
+            )
+        }
+        meetups[index] = updatedMeetup
+    }
+
+    private static func encode(_ participants: [Friend]) -> [[String: String]] {
+        participants.map { friend in
+            [
+                "id": friend.id,
+                "name": friend.name,
+                "initials": friend.initials,
+                "profileColor": friend.profileColor.rawValue,
+                "lastSharedContext": friend.lastSharedContext
+            ]
+        }
+    }
+
+    private static func decode(_ document: QueryDocumentSnapshot, groupID: String? = nil) -> Meetup? {
         let data = document.data()
         guard let id = UUID(uuidString: document.documentID),
               let title = data["title"] as? String,
               let participantData = data["participants"] as? [[String: Any]],
-              let timestamps = data["candidateTimes"] as? [Timestamp] else {
+              let candidateValues = data["candidateTimes"] as? [Any] else {
             return nil
         }
 
         let participants = participantData.compactMap { item -> Friend? in
             guard let rawID = item["id"] as? String,
-                  let id = UUID(uuidString: rawID),
                   let name = item["name"] as? String else { return nil }
             return Friend(
-                id: id,
+                id: rawID,
                 name: name,
                 initials: item["initials"] as? String ?? String(name.prefix(1)),
                 profileColor: ProfileColor(rawValue: item["profileColor"] as? String ?? "blue") ?? .blue,
@@ -112,20 +279,36 @@ final class MeetupStore: ObservableObject {
             )
         }
         guard !participants.isEmpty else { return nil }
+        let candidateTimes = candidateValues.compactMap(Self.decodeCandidateTime)
+        guard !candidateTimes.isEmpty else { return nil }
 
         return Meetup(
             id: id,
+            groupID: groupID ?? data["groupID"] as? String,
             title: title,
             participants: participants,
-            candidateTimes: timestamps.map {
-                MeetupTimeOption(id: UUID(), startsAt: $0.dateValue(), availableFriendIDs: [])
-            },
+            candidateTimes: candidateTimes,
             confirmedTime: nil,
             location: data["location"] as? String,
             status: .planning,
             arrivalStates: [],
             moments: []
         )
+    }
+
+    private static func decodeCandidateTime(_ value: Any) -> MeetupTimeOption? {
+        if let timestamp = value as? Timestamp {
+            let date = timestamp.dateValue()
+            return MeetupTimeOption(
+                id: "legacy-\(Int(date.timeIntervalSince1970))",
+                startsAt: date,
+                availableFriendIDs: []
+            )
+        }
+        guard let candidate = value as? [String: Any],
+              let id = candidate["id"] as? String,
+              let timestamp = candidate["startsAt"] as? Timestamp else { return nil }
+        return MeetupTimeOption(id: id, startsAt: timestamp.dateValue(), availableFriendIDs: [])
     }
 
     private static func sortDate(for meetup: Meetup) -> Date {
@@ -151,6 +334,7 @@ struct MeetupsView: View {
     let meetups: [Meetup]
     @ObservedObject var store: MeetupStore
     let allowsCreation: Bool
+    let onOpenGroups: () -> Void
 
     @State private var showingCreateSheet = false
 
@@ -158,11 +342,13 @@ struct MeetupsView: View {
         meetups: [Meetup],
         store: MeetupStore,
         allowsCreation: Bool,
+        onOpenGroups: @escaping () -> Void = {},
         initiallyShowingCreateSheet: Bool = false
     ) {
         self.meetups = meetups
         self.store = store
         self.allowsCreation = allowsCreation
+        self.onOpenGroups = onOpenGroups
         _showingCreateSheet = State(initialValue: initiallyShowingCreateSheet)
     }
 
@@ -172,21 +358,62 @@ struct MeetupsView: View {
                 if store.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, alignment: .center)
+                } else if store.loadErrorMessage != nil {
+                    VStack(spacing: 12) {
+                        ContentUnavailableView(
+                            "모임을 불러오지 못했어요",
+                            systemImage: "arrow.clockwise",
+                            description: Text("네트워크 연결을 확인한 뒤 다시 시도해 주세요.")
+                        )
+                        Button("다시 시도", systemImage: "arrow.clockwise") {
+                            Task { await store.reload() }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 } else {
-                    ContentUnavailableView(
-                        "아직 모임이 없어요",
-                        systemImage: "calendar",
-                        description: Text("친구들과 만날 약속을 만들어 보세요.")
-                    )
+                    VStack(spacing: 12) {
+                        ContentUnavailableView(
+                            "아직 모임이 없어요",
+                            systemImage: "calendar",
+                            description: Text(allowsCreation
+                                ? "친구들과 만날 약속을 만들어 보세요."
+                                : "실제 그룹 멤버와 함께하는 모임을 준비 중이에요. 먼저 그룹 탭에서 친구를 초대해 주세요.")
+                        )
+                        if !allowsCreation {
+                            Button("그룹으로 이동", systemImage: "person.3", action: onOpenGroups)
+                                .buttonStyle(.borderedProminent)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
             } else {
+                if let loadErrorMessage = store.loadErrorMessage {
+                    Section {
+                        Label(loadErrorMessage, systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Button("다시 시도", systemImage: "arrow.clockwise") {
+                            Task { await store.reload() }
+                        }
+                    }
+                }
                 ForEach(meetups) { meetup in
-                    MeetupRow(meetup: meetup)
+                    NavigationLink {
+                        MeetupDetailView(meetup: meetup, store: store)
+                    } label: {
+                        MeetupRow(meetup: meetup)
+                    }
                 }
             }
         }
         .listStyle(.insetGrouped)
         .navigationTitle("모임")
+        .refreshable { await store.reload() }
         .toolbar {
             if allowsCreation {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -216,13 +443,133 @@ struct MeetupsView: View {
     }
 }
 
-private struct CreateMeetupSheet: View {
+struct MeetupDetailView: View {
+    let meetup: Meetup
     @ObservedObject var store: MeetupStore
+    @State private var selectedCandidateIDs: Set<String>
+    @State private var errorMessage: String?
+    @State private var didSave = false
+
+    init(meetup: Meetup, store: MeetupStore) {
+        self.meetup = meetup
+        self.store = store
+        _selectedCandidateIDs = State(initialValue: meetup.myAvailableCandidateIDs)
+    }
+
+    private var currentMeetup: Meetup {
+        store.meetups.first { $0.id == meetup.id && $0.groupID == meetup.groupID } ?? meetup
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Text(currentMeetup.participants.map(\.name).joined(separator: " · "))
+                    .foregroundStyle(.secondary)
+                if let location = currentMeetup.location {
+                    Label(location, systemImage: "mappin.and.ellipse")
+                }
+                if let bestSharedTime = currentMeetup.bestSharedTime {
+                    Label(
+                        "모두 가능한 시간 · \(bestSharedTime.formatted(date: .abbreviated, time: .shortened))",
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .foregroundStyle(.green)
+                }
+            } header: {
+                Text(currentMeetup.title)
+            }
+
+            if currentMeetup.groupID != nil {
+                Section {
+                    ForEach(currentMeetup.candidateTimes.sorted { $0.startsAt < $1.startsAt }) { option in
+                        Toggle(isOn: candidateBinding(for: option.id)) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(option.startsAt.formatted(date: .complete, time: .shortened))
+                                Text("가능 \(option.availableFriendIDs.count) / \(currentMeetup.participants.count)명")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    if didSave {
+                        Label("일정 응답을 저장했어요.", systemImage: "checkmark.circle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.green)
+                    }
+                } header: {
+                    Text("가능한 시간")
+                } footer: {
+                    Text("참여 가능한 시간을 모두 선택해 주세요. 선택하지 않은 시간은 어렵다는 응답으로 저장됩니다.")
+                }
+            } else {
+                Section {
+                    Text("이 모임은 만든 사람 계정에만 저장된 개인 초안이에요.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("모임")
+        .navigationBarTitleDisplayMode(.inline)
+        .refreshable { await store.reload() }
+        .toolbar {
+            if currentMeetup.groupID != nil {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("응답 저장") { saveAvailability() }
+                        .disabled(store.isWorking)
+                }
+            }
+        }
+        .alert("응답을 저장하지 못했어요", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("확인", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "잠시 후 다시 시도해 주세요.")
+        }
+        .onChange(of: currentMeetup.myAvailableCandidateIDs) { _, newValue in
+            selectedCandidateIDs = newValue
+        }
+    }
+
+    private func candidateBinding(for id: String) -> Binding<Bool> {
+        Binding(
+            get: { selectedCandidateIDs.contains(id) },
+            set: { isSelected in
+                if isSelected {
+                    selectedCandidateIDs.insert(id)
+                } else {
+                    selectedCandidateIDs.remove(id)
+                }
+                didSave = false
+            }
+        )
+    }
+
+    private func saveAvailability() {
+        Task {
+            do {
+                try await store.saveAvailability(for: currentMeetup, candidateIDs: selectedCandidateIDs)
+                didSave = true
+                errorMessage = nil
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+}
+
+struct CreateMeetupSheet: View {
+    @ObservedObject var store: MeetupStore
+    private let groupID: String?
+    private let participants: [Friend]
     @Environment(\.dismiss) private var dismiss
 
     @State private var title = ""
     @State private var location = ""
-    @State private var selectedFriendIDs = Set<UUID>()
+    @State private var selectedFriendIDs = Set<Friend.ID>()
     @State private var candidateDates: [Date] = []
     @State private var candidateDate: Date = {
         Calendar.current.nextDate(
@@ -232,8 +579,16 @@ private struct CreateMeetupSheet: View {
         ) ?? .now.addingTimeInterval(60 * 60)
     }()
 
-    init(store: MeetupStore, screenshotPreview: Bool) {
+    init(
+        store: MeetupStore,
+        groupID: String? = nil,
+        participants: [Friend] = [],
+        screenshotPreview: Bool
+    ) {
         self.store = store
+        self.groupID = groupID
+        self.participants = screenshotPreview ? MockData.friends : participants
+        _selectedFriendIDs = State(initialValue: Set((screenshotPreview ? MockData.friends : participants).map(\.id)))
         if screenshotPreview, let sample = MockData.meetups.first {
             _title = State(initialValue: "토요일 저녁 식사")
             _location = State(initialValue: "성수동")
@@ -246,7 +601,10 @@ private struct CreateMeetupSheet: View {
 
     private var canCreate: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && title.count <= 80
+            && location.count <= 100
             && !selectedFriendIDs.isEmpty
+            && candidateDates.count <= 8
             && !candidateDates.isEmpty
             && !store.isWorking
     }
@@ -257,17 +615,39 @@ private struct CreateMeetupSheet: View {
                 Section("모임") {
                     TextField("예: 토요일 저녁", text: $title)
                         .textInputAutocapitalization(.sentences)
+                    if title.count > 80 {
+                        Text("모임 이름은 80자까지 입력할 수 있어요.")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
                     TextField("장소 (선택)", text: $location)
+                    if location.count > 100 {
+                        Text("장소는 100자까지 입력할 수 있어요.")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
                 }
 
                 Section {
-                    ForEach(MockData.friends) { friend in
-                        friendSelectionRow(friend)
+                    ForEach(participants) { friend in
+                        if groupID == nil {
+                            friendSelectionRow(friend)
+                        } else {
+                            HStack(spacing: 12) {
+                                InitialsAvatar(friend: friend)
+                                Text(friend.name)
+                                Spacer()
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.tint)
+                            }
+                        }
                     }
                 } header: {
                     Text("함께할 친구")
                 } footer: {
-                    Text("현재 친구 목록은 화면 확인용 샘플입니다. 선택한 친구에게 초대가 전송되지는 않으며, 모임은 내 계정에만 저장됩니다.")
+                    Text(groupID == nil
+                        ? "샘플 화면에서만 사용하는 친구예요. 실제 앱에서는 저장·초대되지 않습니다."
+                        : "현재 그룹 멤버 모두에게 공유되는 모임입니다.")
                 }
 
                 Section {
@@ -362,15 +742,25 @@ private struct CreateMeetupSheet: View {
     }
 
     private func createMeetup() {
-        let participants = MockData.friends.filter { selectedFriendIDs.contains($0.id) }
+        let selectedParticipants = participants.filter { selectedFriendIDs.contains($0.id) }
         Task {
             do {
-                try await store.create(
-                    title: title,
-                    participants: participants,
-                    candidateDates: candidateDates,
-                    location: location
-                )
+                if let groupID {
+                    try await store.createShared(
+                        groupID: groupID,
+                        title: title,
+                        participants: selectedParticipants,
+                        candidateDates: candidateDates,
+                        location: location
+                    )
+                } else {
+                    try await store.create(
+                        title: title,
+                        participants: selectedParticipants,
+                        candidateDates: candidateDates,
+                        location: location
+                    )
+                }
                 dismiss()
             } catch {
                 store.errorMessage = error.localizedDescription

@@ -2,7 +2,7 @@ import Foundation
 
 enum MockData {
     static let jaeyun = Friend(
-        id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+        id: "demo-jaeyun",
         name: "재윤",
         initials: "JY",
         profileColor: .blue,
@@ -10,7 +10,7 @@ enum MockData {
     )
 
     static let minsu = Friend(
-        id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+        id: "demo-minsu",
         name: "민수",
         initials: "MS",
         profileColor: .green,
@@ -18,7 +18,7 @@ enum MockData {
     )
 
     static let jihyun = Friend(
-        id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
+        id: "demo-jihyun",
         name: "지현",
         initials: "JH",
         profileColor: .orange,
@@ -26,7 +26,7 @@ enum MockData {
     )
 
     static let sora = Friend(
-        id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
+        id: "demo-sora",
         name: "소라",
         initials: "SR",
         profileColor: .pink,
@@ -49,12 +49,12 @@ enum MockData {
                 participants: [jaeyun, minsu, jihyun],
                 candidateTimes: [
                     MeetupTimeOption(
-                        id: UUID(uuidString: "20000000-0000-0000-0000-000000000001")!,
+                        id: "candidate-dinner-saturday",
                         startsAt: nextSaturday,
                         availableFriendIDs: [jaeyun.id, minsu.id, jihyun.id]
                     ),
                     MeetupTimeOption(
-                        id: UUID(uuidString: "20000000-0000-0000-0000-000000000002")!,
+                        id: "candidate-dinner-sunday",
                         startsAt: nextSunday,
                         availableFriendIDs: [minsu.id, jihyun.id]
                     )
@@ -75,7 +75,7 @@ enum MockData {
                 participants: [jaeyun, sora],
                 candidateTimes: [
                     MeetupTimeOption(
-                        id: UUID(uuidString: "20000000-0000-0000-0000-000000000003")!,
+                        id: "candidate-gallery-saturday",
                         startsAt: followingSaturday,
                         availableFriendIDs: [jaeyun.id, sora.id]
                     )

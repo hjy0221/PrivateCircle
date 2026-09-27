@@ -17,6 +17,16 @@ struct GroupMember: Identifiable {
     let id: String
     let displayName: String
     let role: String
+
+    var friend: Friend {
+        Friend(
+            id: id,
+            name: displayName,
+            initials: String(displayName.prefix(2)),
+            profileColor: .blue,
+            lastSharedContext: "그룹 멤버"
+        )
+    }
 }
 
 @MainActor
@@ -180,11 +190,13 @@ private enum GroupActionError: LocalizedError {
 
 struct GroupsView: View {
     let user: AppUser
+    let meetupStore: MeetupStore
     @StateObject private var store: GroupsStore
     @State private var showingCreateSheet = false
 
-    init(user: AppUser) {
+    init(user: AppUser, meetupStore: MeetupStore) {
         self.user = user
+        self.meetupStore = meetupStore
         _store = StateObject(wrappedValue: GroupsStore(user: user))
     }
 
@@ -211,7 +223,7 @@ struct GroupsView: View {
                 } else {
                     ForEach(store.groups) { group in
                         NavigationLink {
-                            GroupDetailView(group: group, store: store)
+                            GroupDetailView(group: group, store: store, meetupStore: meetupStore)
                         } label: {
                             GroupRow(group: group)
                         }
@@ -357,9 +369,11 @@ private struct CreateGroupSheet: View {
 private struct GroupDetailView: View {
     let group: CircleGroup
     @ObservedObject var store: GroupsStore
+    @ObservedObject var meetupStore: MeetupStore
     @State private var members: [GroupMember] = []
     @State private var isLoading = true
     @State private var showingInviteSheet = false
+    @State private var showingMeetupSheet = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -393,6 +407,29 @@ private struct GroupDetailView: View {
                     Label("이메일로 친구 초대", systemImage: "person.badge.plus")
                 }
             }
+
+            Section("모임") {
+                let groupMeetups = meetupStore.meetups.filter { $0.groupID == group.id }
+                if groupMeetups.isEmpty {
+                    Text("아직 이 그룹의 모임이 없어요.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(groupMeetups) { meetup in
+                        NavigationLink {
+                            MeetupDetailView(meetup: meetup, store: meetupStore)
+                        } label: {
+                            MeetupRow(meetup: meetup)
+                        }
+                    }
+                }
+
+                Button {
+                    showingMeetupSheet = true
+                } label: {
+                    Label("그룹 모임 만들기", systemImage: "calendar.badge.plus")
+                }
+                .disabled(isLoading || members.isEmpty || meetupStore.isWorking)
+            }
         }
         .navigationTitle(group.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -402,6 +439,14 @@ private struct GroupDetailView: View {
             Task { await loadMembers() }
         }) {
             InviteMemberSheet(group: group, store: store)
+        }
+        .sheet(isPresented: $showingMeetupSheet) {
+            CreateMeetupSheet(
+                store: meetupStore,
+                groupID: group.id,
+                participants: members.map(\.friend),
+                screenshotPreview: false
+            )
         }
         .alert("그룹을 불러올 수 없어요", isPresented: Binding(
             get: { errorMessage != nil },
@@ -418,6 +463,7 @@ private struct GroupDetailView: View {
         defer { isLoading = false }
         do {
             members = try await store.members(of: group)
+            await meetupStore.reload()
         } catch {
             errorMessage = error.localizedDescription
         }

@@ -1,7 +1,7 @@
 import Foundation
 
 struct Friend: Identifiable, Hashable {
-    let id: UUID
+    let id: String
     var name: String
     var initials: String
     var profileColor: ProfileColor
@@ -17,6 +17,8 @@ enum ProfileColor: String, Hashable {
 
 struct Meetup: Identifiable, Hashable {
     let id: UUID
+    var groupID: String? = nil
+    var myAvailableCandidateIDs: Set<String> = []
     var title: String
     var participants: [Friend]
     var candidateTimes: [MeetupTimeOption]
@@ -33,7 +35,7 @@ struct Meetup: Identifiable, Hashable {
 }
 
 struct MeetupTimeOption: Identifiable, Hashable {
-    let id: UUID
+    let id: String
     var startsAt: Date
     var availableFriendIDs: Set<Friend.ID>
 }

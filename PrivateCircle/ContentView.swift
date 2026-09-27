@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var session = SessionStore()
-    @StateObject private var meetupStore = MeetupStore()
     @State private var selectedTab: String = {
         let argument = ProcessInfo.processInfo.arguments.first {
             $0.hasPrefix("--screenshot-tab=")
@@ -14,8 +13,10 @@ struct ContentView: View {
         Group {
 #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--screenshot-preview") {
-                appTabs(
-                    for: AppUser(id: "screenshot-demo", email: "demo@urisai.app", displayName: "우리 사이"),
+                UserTabs(
+                    user: AppUser(id: "screenshot-demo", email: "demo@urisai.app", displayName: "우리 사이"),
+                    session: session,
+                    selectedTab: $selectedTab,
                     screenshotPreview: true
                 )
             } else {
@@ -33,20 +34,39 @@ struct ContentView: View {
             if session.isLoading {
                 ProgressView("불러오는 중")
             } else if let user = session.user {
-                appTabs(for: user)
+                UserTabs(user: user, session: session, selectedTab: $selectedTab)
+                    .id(user.id)
             } else {
                 AuthView(session: session)
             }
         }
     }
 
-    private func appTabs(for user: AppUser, screenshotPreview: Bool = false) -> some View {
+}
+
+private struct UserTabs: View {
+    let user: AppUser
+    @ObservedObject var session: SessionStore
+    @Binding var selectedTab: String
+    var screenshotPreview = false
+    @StateObject private var meetupStore: MeetupStore
+
+    init(user: AppUser, session: SessionStore, selectedTab: Binding<String>, screenshotPreview: Bool = false) {
+        self.user = user
+        self.session = session
+        self._selectedTab = selectedTab
+        self.screenshotPreview = screenshotPreview
+        _meetupStore = StateObject(wrappedValue: MeetupStore(userID: user.id))
+    }
+
+    var body: some View {
         let screenshotMeetupCreation = ProcessInfo.processInfo.arguments.contains("--screenshot-meetup-create")
         return TabView(selection: $selectedTab) {
             NavigationStack {
                 HomeView(
                     meetups: screenshotPreview ? MockData.meetups : meetupStore.meetups,
-                    isLoading: !screenshotPreview && meetupStore.isLoading
+                    isLoading: !screenshotPreview && meetupStore.isLoading,
+                    showsSampleContent: screenshotPreview
                 )
                     .toolbar { accountToolbar(user: user) }
             }
@@ -61,10 +81,10 @@ struct ContentView: View {
                 if screenshotPreview {
                     ScreenshotGroupsView()
                 } else {
-                    GroupsView(user: user)
+                    GroupsView(user: user, meetupStore: meetupStore)
                 }
 #else
-                GroupsView(user: user)
+                GroupsView(user: user, meetupStore: meetupStore)
 #endif
                 }
                 .toolbar { accountToolbar(user: user) }
@@ -75,7 +95,7 @@ struct ContentView: View {
             .tag("groups")
 
             NavigationStack {
-                FriendsView()
+                FriendsView(onOpenGroups: { selectedTab = "groups" })
                     .toolbar { accountToolbar(user: user) }
             }
             .tabItem {
@@ -87,8 +107,9 @@ struct ContentView: View {
                 MeetupsView(
                     meetups: screenshotPreview ? MockData.meetups : meetupStore.meetups,
                     store: meetupStore,
-                    allowsCreation: !screenshotPreview || screenshotMeetupCreation,
-                    initiallyShowingCreateSheet: screenshotMeetupCreation
+                    allowsCreation: screenshotPreview && screenshotMeetupCreation,
+                    onOpenGroups: { selectedTab = "groups" },
+                    initiallyShowingCreateSheet: screenshotPreview && screenshotMeetupCreation
                 )
                     .toolbar { accountToolbar(user: user) }
             }
@@ -222,29 +243,30 @@ private struct ScreenshotMemoriesView: View {
 #endif
 
 private struct FriendsView: View {
+    let onOpenGroups: () -> Void
+
     var body: some View {
-        List(MockData.friends) { friend in
-            FriendRow(friend: friend)
+        VStack(spacing: 12) {
+            ContentUnavailableView(
+                "아직 연결된 친구가 없어요",
+                systemImage: "person.2",
+                description: Text("실제 친구를 그룹에 초대하면 함께하는 사람을 확인할 수 있어요.")
+            )
+            Button("그룹으로 이동", systemImage: "person.3", action: onOpenGroups)
+                .buttonStyle(.borderedProminent)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("친구")
     }
 }
 
 private struct MemoriesView: View {
     var body: some View {
-        List(MockData.memories) { memory in
-            VStack(alignment: .leading, spacing: 6) {
-                Text(memory.title)
-                    .font(.headline)
-                Text(memory.location)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text("사진과 순간 \(memory.momentCount)개")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.vertical, 4)
-        }
+        ContentUnavailableView(
+            "아직 함께한 추억이 없어요",
+            systemImage: "photo.on.rectangle",
+            description: Text("모임에서 사진과 순간을 나누면 여기에 추억으로 모을 수 있어요.")
+        )
         .navigationTitle("추억")
     }
 }

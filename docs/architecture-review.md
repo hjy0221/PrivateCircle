@@ -172,7 +172,7 @@ SwiftUI, NavigationStack, Form, Sheet, SF Symbols와 소규모 ObservableObject 
 
 ## 검증과 운영 준비
 
-현재 앱 테스트 타깃은 없다. `firebase.json`과 Firestore Rules Unit Testing 기반이 있다. 2026-09-27 Firebase Console에서 대상 프로젝트와 Firestore Rules / 데이터 구조 / Auth 계정 수를 읽기 전용 확인했다. 로컬 `firestore.rules`와 게시된 규칙은 일치하지 않으며 Firebase CLI는 로그인되어 있지 않다. `.firebaserc`에 앱의 프로젝트 ID를 지정했지만 운영 Rules는 배포하지 않았다.
+현재 앱 테스트 타깃은 없다. `firebase.json`과 Firestore Rules Unit Testing 기반이 있다. 2026-09-27 Firebase Console에서 대상 프로젝트와 Firestore Rules / 데이터 구조 / Auth 계정 수를 읽기 전용 확인했다. 로컬 `firestore.rules`와 게시된 규칙은 일치하지 않으며 Firebase CLI는 로그인되어 있지 않다. 기본 CLI 설정 폴더가 현재 사용자에게 쓰기 불가여서 로그인과 배포 명령은 저장소 밖의 별도 쓰기 가능 경로를 사용한다. `.firebaserc`에 앱의 프로젝트 ID를 지정했지만 운영 Rules는 배포하지 않았다.
 
 수정과 함께 다음 검증을 추가한다.
 

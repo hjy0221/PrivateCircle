@@ -95,7 +95,10 @@ final class MeetupStore: ObservableObject {
                 }
                 guard let snapshot, let decoded = Self.decode(snapshot, groupID: groupID) else { return }
                 let choices = self.availabilityChoicesByMeetup[key] ?? [:]
-                self.upsert(self.applyingAvailability(choices, to: decoded))
+                var updatedMeetup = self.applyingAvailability(choices, to: decoded)
+                updatedMeetup.arrivalStates = self.meetups
+                    .first(where: { $0.groupID == groupID && $0.id == meetup.id })?.arrivalStates ?? []
+                self.upsert(updatedMeetup)
             }
         }
 
@@ -115,7 +118,23 @@ final class MeetupStore: ObservableObject {
                 self.upsert(self.applyingAvailability(choices, to: current))
             }
         }
-        realtimeListeners[key] = [meetupListener, availabilityListener]
+
+        let arrivalStateListener = reference.collection("arrivalStates").addSnapshotListener { [weak self] snapshot, error in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      self.userID == userID,
+                      self.realtimeListeners[key] != nil else { return }
+                if let error {
+                    self.loadErrorMessage = error.localizedDescription
+                    return
+                }
+                guard let snapshot,
+                      let current = self.meetups.first(where: { $0.groupID == groupID && $0.id == meetup.id }) else { return }
+                let states = Self.decodeArrivalStates(snapshot, participants: current.participants)
+                self.upsert(Self.applyingArrivalStates(states, to: current))
+            }
+        }
+        realtimeListeners[key] = [meetupListener, availabilityListener, arrivalStateListener]
     }
 
     func stopRealtimeUpdates(for meetup: Meetup) {
@@ -329,6 +348,36 @@ final class MeetupStore: ObservableObject {
         meetups[index] = updatedMeetup
     }
 
+    func saveArrivalState(for meetup: Meetup, state: ArrivalProgress) async throws {
+        guard let userID,
+              let groupID = meetup.groupID,
+              meetup.status == .confirmed,
+              let confirmedTime = meetup.confirmedTime,
+              Calendar.current.isDateInToday(confirmedTime),
+              let friend = meetup.participants.first(where: { $0.id == userID }) else {
+            throw MeetupStoreError.arrivalUnavailable
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+
+        try await database.collection("groups").document(groupID)
+            .collection("meetups").document(meetup.id.uuidString)
+            .collection("arrivalStates").document(userID)
+            .setData([
+                "userID": userID,
+                "state": state.rawValue,
+                "updatedAt": FieldValue.serverTimestamp()
+            ])
+
+        let localState = ArrivalState(userID: userID, friend: friend, state: state, updatedAt: .now)
+        guard let index = meetups.firstIndex(where: { $0.id == meetup.id && $0.groupID == groupID }) else { return }
+        var updatedMeetup = meetups[index]
+        updatedMeetup.arrivalStates.removeAll { $0.userID == userID }
+        updatedMeetup.arrivalStates.append(localState)
+        meetups[index] = Self.applyingArrivalStates(updatedMeetup.arrivalStates, to: updatedMeetup)
+    }
+
     private static func encode(_ participants: [Friend]) -> [[String: String]] {
         participants.map { friend in
             [
@@ -398,6 +447,23 @@ final class MeetupStore: ObservableObject {
         }
     }
 
+    private static func decodeArrivalStates(_ snapshot: QuerySnapshot, participants: [Friend]) -> [ArrivalState] {
+        let documentsByUserID = Dictionary(uniqueKeysWithValues: snapshot.documents.map { ($0.documentID, $0) })
+        return participants.compactMap { friend in
+            guard let document = documentsByUserID[friend.id] else { return nil }
+            let data = document.data()
+            guard data["userID"] as? String == friend.id,
+                  let rawState = data["state"] as? String,
+                  let state = ArrivalProgress(rawValue: rawState) else { return nil }
+            return ArrivalState(
+                userID: friend.id,
+                friend: friend,
+                state: state,
+                updatedAt: (data["updatedAt"] as? Timestamp)?.dateValue() ?? .now
+            )
+        }
+    }
+
     private static func key(groupID: String, meetupID: String) -> String {
         "\(groupID)/\(meetupID)"
     }
@@ -422,6 +488,13 @@ final class MeetupStore: ObservableObject {
                 availableFriendIDs: availableIDs
             )
         }
+        return updatedMeetup
+    }
+
+    private static func applyingArrivalStates(_ states: [ArrivalState], to meetup: Meetup) -> Meetup {
+        var updatedMeetup = meetup
+        let statesByUserID = Dictionary(states.map { ($0.userID, $0) }, uniquingKeysWith: { _, latest in latest })
+        updatedMeetup.arrivalStates = meetup.participants.compactMap { statesByUserID[$0.id] }
         return updatedMeetup
     }
 
@@ -463,6 +536,7 @@ private enum MeetupStoreError: LocalizedError {
     case incomplete
     case notPlanning
     case cannotConfirm
+    case arrivalUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -474,6 +548,8 @@ private enum MeetupStoreError: LocalizedError {
             "일정 조율 중인 모임만 응답할 수 있어요."
         case .cannotConfirm:
             "모임 만든 사람만 후보 일정을 확정할 수 있어요."
+        case .arrivalUnavailable:
+            "확정된 모임 당일에 참가자만 도착 상태를 공유할 수 있어요."
         }
     }
 }
@@ -610,6 +686,15 @@ struct MeetupDetailView: View {
         store.meetups.first { $0.id == meetup.id && $0.groupID == meetup.groupID } ?? meetup
     }
 
+    private var isMeetupDay: Bool {
+        currentMeetup.status == .confirmed
+            && currentMeetup.confirmedTime.map(Calendar.current.isDateInToday) == true
+    }
+
+    private var myArrivalState: ArrivalState? {
+        currentMeetup.arrivalStates.first { store.isCurrentUser($0.friend) }
+    }
+
     var body: some View {
         List {
             Section {
@@ -684,6 +769,50 @@ struct MeetupDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                if currentMeetup.status == .confirmed {
+                    Section {
+                        ForEach(currentMeetup.participants) { friend in
+                            let arrivalState = currentMeetup.arrivalStates.first { $0.userID == friend.id }
+                            HStack(spacing: 12) {
+                                InitialsAvatar(friend: friend)
+                                Text(friend.name)
+                                Spacer()
+                                Label(
+                                    arrivalState?.state.title ?? "상태 미공유",
+                                    systemImage: arrivalState?.state.symbolName ?? "minus"
+                                )
+                                .font(.subheadline)
+                                .foregroundStyle(arrivalState?.state == .arrived ? Color.green : Color.secondary)
+                            }
+                        }
+
+                        LabeledContent("내 상태") {
+                            Menu {
+                                ForEach(ArrivalProgress.allCases, id: \.self) { state in
+                                    Button {
+                                        saveArrivalState(state)
+                                    } label: {
+                                        Label(state.title, systemImage: state.symbolName)
+                                    }
+                                }
+                            } label: {
+                                Label(
+                                    myArrivalState?.state.title ?? "상태 공유",
+                                    systemImage: myArrivalState?.state.symbolName ?? "location.circle"
+                                )
+                            }
+                            .disabled(!isMeetupDay || store.isWorking || !currentMeetup.participants.contains(where: { store.isCurrentUser($0) }))
+                        }
+
+                        Text(isMeetupDay
+                            ? "도착 상태는 모임 참가자에게만 실시간 공유돼요. 위치 추적은 하지 않아요."
+                            : "모임 당일에 상태를 공유할 수 있어요. 실시간 위치는 수집하지 않아요.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } header: {
+                        Text("도착 상태")
+                    }
+                }
             } else {
                 Section {
                     Text("이 모임은 만든 사람 계정에만 저장된 개인 초안이에요.")
@@ -703,7 +832,7 @@ struct MeetupDetailView: View {
                 }
             }
         }
-        .alert("응답을 저장하지 못했어요", isPresented: Binding(
+        .alert("저장하지 못했어요", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
@@ -759,6 +888,17 @@ struct MeetupDetailView: View {
             do {
                 try await store.confirmSchedule(for: currentMeetup, candidateID: option.id)
                 candidateToConfirm = nil
+                errorMessage = nil
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func saveArrivalState(_ state: ArrivalProgress) {
+        Task {
+            do {
+                try await store.saveArrivalState(for: currentMeetup, state: state)
                 errorMessage = nil
             } catch {
                 errorMessage = error.localizedDescription

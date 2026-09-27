@@ -52,17 +52,40 @@ enum MeetupStatus: String, CaseIterable, Hashable {
 }
 
 struct ArrivalState: Identifiable, Hashable {
-    let id: UUID
+    let userID: String
     var friend: Friend
     var state: ArrivalProgress
     var updatedAt: Date
+
+    var id: String { userID }
 }
 
 enum ArrivalProgress: String, CaseIterable, Hashable {
-    case notStarted = "아직 출발 전"
-    case leavingSoon = "곧 출발"
-    case onTheWay = "이동 중"
-    case arrived = "도착했어요"
+    case notStarted
+    case leavingSoon
+    case onTheWay
+    case arrivingSoon
+    case arrived
+
+    var title: String {
+        switch self {
+        case .notStarted: "아직 출발 전"
+        case .leavingSoon: "곧 출발"
+        case .onTheWay: "이동 중"
+        case .arrivingSoon: "거의 도착"
+        case .arrived: "도착했어요"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .notStarted: "clock"
+        case .leavingSoon: "figure.walk"
+        case .onTheWay: "tram.fill"
+        case .arrivingSoon: "location.circle"
+        case .arrived: "checkmark.circle.fill"
+        }
+    }
 }
 
 struct Moment: Identifiable, Hashable {

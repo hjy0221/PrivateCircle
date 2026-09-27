@@ -179,6 +179,20 @@ service cloud.firestore {
 
           allow delete: if false;
         }
+
+        match /arrivalStates/{userId} {
+          allow get, list: if isMeetupParticipant(groupId, meetupId);
+
+          allow create, update: if isMeetupParticipant(groupId, meetupId)
+            && userId == request.auth.uid
+            && get(/databases/$(database)/documents/groups/$(groupId)/meetups/$(meetupId)).data.status == 'confirmed'
+            && request.resource.data.keys().hasOnly(['userID', 'state', 'updatedAt'])
+            && request.resource.data.userID == userId
+            && request.resource.data.state in ['notStarted', 'leavingSoon', 'onTheWay', 'arrivingSoon', 'arrived']
+            && request.resource.data.updatedAt == request.time;
+
+          allow delete: if false;
+        }
       }
 
       match /members/{memberId} {

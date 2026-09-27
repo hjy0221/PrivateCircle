@@ -63,9 +63,9 @@ enum MockData {
                 location: "성수동",
                 status: .confirmed,
                 arrivalStates: [
-                    ArrivalState(id: UUID(), friend: jaeyun, state: .notStarted, updatedAt: .now),
-                    ArrivalState(id: UUID(), friend: minsu, state: .notStarted, updatedAt: .now),
-                    ArrivalState(id: UUID(), friend: jihyun, state: .notStarted, updatedAt: .now)
+                    ArrivalState(userID: jaeyun.id, friend: jaeyun, state: .notStarted, updatedAt: .now),
+                    ArrivalState(userID: minsu.id, friend: minsu, state: .notStarted, updatedAt: .now),
+                    ArrivalState(userID: jihyun.id, friend: jihyun, state: .notStarted, updatedAt: .now)
                 ],
                 moments: []
             ),

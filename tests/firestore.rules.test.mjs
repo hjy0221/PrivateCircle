@@ -6,6 +6,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -83,6 +84,20 @@ function signedIn(uid, emailVerified = true) {
     email: `${uid}@example.com`,
     email_verified: emailVerified,
   }).firestore();
+}
+
+async function confirmMeetupForTest() {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), meetupPath), {
+      status: "confirmed",
+      confirmedCandidateID: "candidate-1",
+      confirmedAt: new Date(),
+    });
+  });
+}
+
+function arrivalStatePayload(userID, state) {
+  return { userID, state, updatedAt: serverTimestamp() };
 }
 
 test("only participants can read a meetup and its responses", async () => {
@@ -197,4 +212,82 @@ test("only the meetup owner can confirm one of its candidates", async () => {
     availableCandidateIDs: ["candidate-1"],
     updatedAt: serverTimestamp(),
   }));
+});
+
+test("participants can create and update only their own valid arrival state after confirmation", async () => {
+  const participantDB = signedIn("participant");
+  const participantStatePath = `${meetupPath}/arrivalStates/participant`;
+  const ownerStatePath = `${meetupPath}/arrivalStates/owner`;
+
+  await assertFails(setDoc(doc(participantDB, participantStatePath), arrivalStatePayload("participant", "onTheWay")));
+  await confirmMeetupForTest();
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), participantStatePath), {
+      userID: "participant",
+      state: "leavingSoon",
+      updatedAt: new Date(),
+    });
+  });
+
+  await assertSucceeds(setDoc(doc(participantDB, participantStatePath), arrivalStatePayload("participant", "arrivingSoon")));
+  await assertSucceeds(setDoc(doc(signedIn("owner"), ownerStatePath), arrivalStatePayload("owner", "notStarted")));
+  await assertFails(setDoc(doc(participantDB, ownerStatePath), arrivalStatePayload("owner", "arrived")));
+  await assertFails(setDoc(doc(participantDB, participantStatePath), arrivalStatePayload("participant", "teleporting")));
+  await assertFails(setDoc(doc(participantDB, participantStatePath), arrivalStatePayload("owner", "arrived")));
+});
+
+test("only verified meetup participants can read arrival states or write their own", async () => {
+  await confirmMeetupForTest();
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), `${meetupPath}/arrivalStates/participant`), {
+      userID: "participant",
+      state: "onTheWay",
+      updatedAt: new Date(),
+    });
+  });
+
+  const participantDB = signedIn("participant");
+  await assertSucceeds(getDoc(doc(participantDB, `${meetupPath}/arrivalStates/participant`)));
+  await assertSucceeds(getDocs(collection(participantDB, `${meetupPath}/arrivalStates`)));
+
+  const otherMemberDB = signedIn("other-member");
+  await assertFails(getDoc(doc(otherMemberDB, `${meetupPath}/arrivalStates/participant`)));
+  await assertFails(getDocs(collection(otherMemberDB, `${meetupPath}/arrivalStates`)));
+  await assertFails(setDoc(doc(otherMemberDB, `${meetupPath}/arrivalStates/other-member`), arrivalStatePayload("other-member", "arrived")));
+
+  const unverifiedDB = signedIn("participant", false);
+  await assertFails(getDocs(collection(unverifiedDB, `${meetupPath}/arrivalStates`)));
+  await assertFails(setDoc(doc(unverifiedDB, `${meetupPath}/arrivalStates/participant`), arrivalStatePayload("participant", "arrived")));
+});
+
+test("a participant listener receives another participant's arrival update", async () => {
+  await confirmMeetupForTest();
+  const readerDB = signedIn("participant");
+  const writerDB = signedIn("owner");
+  const ownerStateReference = doc(readerDB, `${meetupPath}/arrivalStates/owner`);
+
+  let unsubscribe = () => {};
+  const observedState = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      reject(new Error("Timed out waiting for the participant arrival update."));
+    }, 5000);
+    unsubscribe = onSnapshot(ownerStateReference, (snapshot) => {
+      if (snapshot.data()?.state === "onTheWay") {
+        clearTimeout(timeout);
+        unsubscribe();
+        resolve(snapshot.data().state);
+      }
+    }, (error) => {
+      clearTimeout(timeout);
+      unsubscribe();
+      reject(error);
+    });
+  });
+
+  await assertSucceeds(setDoc(
+    doc(writerDB, `${meetupPath}/arrivalStates/owner`),
+    arrivalStatePayload("owner", "onTheWay"),
+  ));
+  assert.equal(await observedState, "onTheWay");
 });

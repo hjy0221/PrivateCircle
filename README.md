@@ -1,5 +1,45 @@
 # 우리 사이
 
+[日本語](https://github.com/hjy0221/PrivateCircle#%E6%97%A5%E6%9C%AC%E8%AA%9E) · [English](https://github.com/hjy0221/PrivateCircle#english) · [한국어](https://github.com/hjy0221/PrivateCircle#%ED%95%9C%EA%B5%AD%EC%96%B4)
+
+## 日本語
+
+PrivateCircle（우리 사이）は、友人との予定を決め、一緒に過ごした時間を思い出として残す、プライベートな関係に焦点を当てた iOS アプリです。
+
+### ねらい
+
+おすすめフィード、広告、フォロワーや「いいね」の競争ではなく、実際に知っている人と予定を立て、会い、その思い出を見つけ直す体験を目指します。[企画背景と MVP 範囲](docs/product-rationale.md)を参照してください。
+
+### 画面と実行
+
+ログイン、ホーム、グループ、友人、予定、思い出の画面を提供します。スクリーンショットは韓国語セクションにあります。Debug スキームでは Launch Arguments の `--screenshot-preview` と `--screenshot-tab=home|groups|friends|meetups|memories` でサンプルデータの画面を再現できます。
+
+セットアップ、Firebase 構成、機能、テスト、プライバシーに関する注意は韓国語セクションに記載しています。
+
+## English
+
+PrivateCircle (우리 사이) is a private, relationship-centered iOS app for making plans with friends and preserving memories of time together. It focuses on people you know rather than recommendation feeds or competition for followers and likes. See the [product rationale](docs/product-rationale.md).
+
+### Screenshots and flows
+
+The screenshots above use sample data in Debug previews; the group examples do not modify Firebase accounts or server data. To recapture them, use the Debug scheme with `--screenshot-preview` and `--screenshot-tab=home|groups|friends|meetups|memories`. Add `--screenshot-group-create` for the group creation sheet, or `--screenshot-tab=meetups` and `--screenshot-meetup-create` for the meetup creation sheet.
+
+Users can create groups and invite friends by email, select participants and propose meetup times, save availability and see responses in real time, and have the meetup creator finalize a time. The product does not center recommendations, follower counts, or likes.
+
+### Technology and current scope
+
+The app uses SwiftUI, iOS 17+, Firebase Authentication, and Cloud Firestore. Implemented features include email authentication, group creation and email invitations, shared meetups with selected participants, individual availability responses and real-time synchronization, creator confirmation, and manual arrival-status sharing on the day. There is no GPS tracking.
+
+On 2026-09-28, locally verified Firestore Rules were deployed to `uri-sai-a8c73` and `npm run verify:rules:production` confirmed the published rules matched `firestore.rules`. Seven Firestore Emulator rule tests and an iOS Simulator Debug build passed. Read-only production inspection found no shared groups or meetups, so no migration was run. Actual two-user A/B verification remains incomplete until a second email-verified account is available. Friends and memories are not connected to real data; shared photo uploads, automatic memories, notifications, account deletion, and release operations remain future MVP work.
+
+### Run and Firebase
+
+Open `PrivateCircle.xcodeproj` in Xcode, select the `PrivateCircle` scheme and a simulator or connected device, then build and run. Firebase requires a suitable `GoogleService-Info.plist` and Firebase Console configuration. The default Firebase project is fixed in `.firebaserc`.
+
+Before publishing rules, run `npm run test:rules`, recheck the target project, authenticate with `npm run login:firebase`, and run `npm run deploy:rules:production`; then run `npm run verify:rules:production` to compare the published default database rules with the local file. These commands use writable CLI configuration outside the repository; deployment targets only the Firestore Rules of `uri-sai-a8c73`, and rules are not deployed automatically. If older records are found, first dry-run an idempotent backfill that validates participants and preserves existing references.
+
+## 한국어
+
 친구들과 약속을 정하고, 함께한 시간을 추억으로 남기는 프라이빗 관계 중심 iOS 앱입니다.
 
 <p align="left">
@@ -60,27 +100,3 @@ Firebase 이메일 인증과 Firestore 그룹 생성·이메일 초대, 참가�
 3. 빌드 후 실행합니다.
 
 Firebase 기능을 사용하려면 프로젝트에 맞는 `GoogleService-Info.plist`와 Firebase Console 설정이 필요합니다. 기본 Firebase 프로젝트는 `.firebaserc`에 고정되어 있습니다. 운영 Rules를 게시하기 전 `npm run test:rules`와 대상 프로젝트를 다시 확인하고, `npm run login:firebase`로 직접 인증한 후 `npm run deploy:rules:production`을 실행합니다. 이어서 `npm run verify:rules:production`으로 게시된 기본 데이터베이스 Rules와 로컬 파일의 일치를 확인합니다. 이 명령들은 저장소 밖의 쓰기 가능한 CLI 설정 경로를 사용하며, 배포 명령은 `uri-sai-a8c73`의 Firestore Rules만 대상으로 합니다. 이 저장소의 Rules는 자동 배포되지 않습니다. 현재 운영 데이터에서 그룹·공동 모임이 발견되지 않아 migration은 불필요하며, 과거 레코드가 확인될 경우 참가자 검증 및 기존 참조 보존을 포함하는 idempotent backfill 절차를 먼저 dry-run으로 수행해야 합니다.
-
----
-
-## English
-
-PrivateCircle (우리 사이) is a private, relationship-centered iOS app for making plans with friends and preserving memories of time together. It focuses on people you know rather than recommendation feeds or competition for followers and likes. See the [product rationale](docs/product-rationale.md).
-
-### Screenshots and flows
-
-The screenshots above use sample data in Debug previews; the group examples do not modify Firebase accounts or server data. To recapture them, use the Debug scheme with `--screenshot-preview` and `--screenshot-tab=home|groups|friends|meetups|memories`. Add `--screenshot-group-create` for the group creation sheet, or `--screenshot-tab=meetups` and `--screenshot-meetup-create` for the meetup creation sheet.
-
-Users can create groups and invite friends by email, select participants and propose meetup times, save availability and see responses in real time, and have the meetup creator finalize a time. The product does not center recommendations, follower counts, or likes.
-
-### Technology and current scope
-
-The app uses SwiftUI, iOS 17+, Firebase Authentication, and Cloud Firestore. Implemented features include email authentication, group creation and email invitations, shared meetups with selected participants, individual availability responses and real-time synchronization, creator confirmation, and manual arrival-status sharing on the day. There is no GPS tracking.
-
-On 2026-09-28, locally verified Firestore Rules were deployed to `uri-sai-a8c73` and `npm run verify:rules:production` confirmed the published rules matched `firestore.rules`. Seven Firestore Emulator rule tests and an iOS Simulator Debug build passed. Read-only production inspection found no shared groups or meetups, so no migration was run. Actual two-user A/B verification remains incomplete until a second email-verified account is available. Friends and memories are not connected to real data; shared photo uploads, automatic memories, notifications, account deletion, and release operations remain future MVP work.
-
-### Run and Firebase
-
-Open `PrivateCircle.xcodeproj` in Xcode, select the `PrivateCircle` scheme and a simulator or connected device, then build and run. Firebase requires a suitable `GoogleService-Info.plist` and Firebase Console configuration. The default Firebase project is fixed in `.firebaserc`.
-
-Before publishing rules, run `npm run test:rules`, recheck the target project, authenticate with `npm run login:firebase`, and run `npm run deploy:rules:production`; then run `npm run verify:rules:production` to compare the published default database rules with the local file. These commands use writable CLI configuration outside the repository; deployment targets only the Firestore Rules of `uri-sai-a8c73`, and rules are not deployed automatically. If older records are found, first dry-run an idempotent backfill that validates participants and preserves existing references.

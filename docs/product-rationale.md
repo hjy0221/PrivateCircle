@@ -1,4 +1,100 @@
-# 우리 사이 기획 배경
+# PrivateCircle Product Rationale
+
+[日本語](https://github.com/hjy0221/PrivateCircle/blob/main/docs/product-rationale.md#%E6%97%A5%E6%9C%AC%E8%AA%9E) · [English](https://github.com/hjy0221/PrivateCircle/blob/main/docs/product-rationale.md#english) · [한국어](https://github.com/hjy0221/PrivateCircle/blob/main/docs/product-rationale.md#%ED%95%9C%EA%B5%AD%EC%96%B4)
+
+## 日本語
+
+## プロダクトの視点
+
+多くの SNS は、友人との近況共有を超え、おすすめコンテンツ、広告、インフルエンサーの消費の場へ広がっています。その中で、親しい人と予定を決め、実際に会い、一緒に過ごしたことを分かち合う経験が後回しになりがちです。PrivateCircle は、より多くの投稿を見せるのではなく、実際に知っている人と会い、あとから経験を分かち合える関係の基本体験を取り戻すことから始まります。
+
+**友人を眺めるための SNS ではなく、友人と実際に会い、関係を築くための SNS。** 公開的な自己表現より、相互に同意した小さな関係を優先します。
+
+## 出発点と仮説
+
+親しい友人との関係で必要なのは、投稿を見続けることより、次の予定を決め、実際に会い、その瞬間をまた見返すことです。予定はメッセンジャーに散らばり、都合合わせは繰り返され、写真も個別のアルバムや会話に残りやすくなります。
+
+親しい人だけの小さな空間で、`グループ → 予定 → 会う → 写真と瞬間 → 思い出` をつなげれば、アプリを見る時間より一緒に過ごす実際の時間を増やせる、というのが製品仮説です。予定の会話、位置共有、写真送信、アルバム整理を「集まり」という一つの文脈にまとめます。
+
+## 設計方針
+
+- 友人とグループを起点にし、知らない人への公開より実際の関係を優先する
+- 個人の公開プロフィールより、目的と親密さに合う小さなグループを重視する
+- 投稿ではなく、参加者、候補日時、確定場所を持つ予定を中核にする
+- 到着状況や共同写真を、同意に基づき同じ集まりにつなげる
+- フォロワー数、いいね数、人気ランキングを関係の成果として見せない
+- 活動を公開フィードへ自動表示せず、共有範囲を明確にする
+- SwiftUI と Apple HIG に沿った iOS 体験を提供する
+
+## 利用の流れ
+
+1. 友人と目的別のグループを作ります。
+2. グループで集まりを作り、候補日時と場所を調整します。
+3. 当日、互いの出発・到着状態を確認します。
+4. 写真や短い瞬間を集まりに共有します。
+5. 集まり単位の思い出として後から見返します。
+
+## 意図的にしないこと
+
+おすすめが決める公開フィード、フォロワー・いいねの競争、インフルエンサー中心の広告フィード、同意のない位置・活動追跡、滞在時間や反応数を関係の健全さの指標とする設計は扱いません。
+
+## 成功指標
+
+予定を作成して共通の日時を決めるまでの時間とメッセージ往復が減るか、アプリで決めた予定が実際の出会いにつながるか、参加者の写真が一つの記録として集まるか、あとから思い出を見返すかを確認します。公開反応や滞在時間を増やすための指標ではありません。
+
+## 現在の実装範囲
+
+Firebase のメール・パスワード認証、Firestore による複数グループ、メール招待、選択グループでの共同予定、候補時間の回答とリアルタイム同期、作成者による予定確定を実装しています。参加者だけが Meetup と availability にアクセスでき、作成者だけが候補を確定できます。当日は参加者が自分で到着状態を共有し、位置を追跡しません。
+
+2026-09-28 時点で、Firebase プロジェクト `uri-sai-a8c73` の Firestore Rules をローカル `firestore.rules` と一致させてデプロイ済みです。ローカルの Rules テスト7件と iOS Simulator Debug ビルドは通過しています。実際の A/B アカウントフロー、友人データ連携、写真アップロード、自動思い出、通知、アカウント削除は今後の実装対象です。
+
+## English
+
+## Product perspective
+
+Most social networks have expanded beyond keeping up with friends into places for consuming recommended content, advertising, and influencer posts. In that shift, making plans with people close to us, meeting them, and sharing what happened can become secondary. PrivateCircle begins by restoring the basic experience of relationships: helping people who actually know each other meet and revisit the moments they shared.
+
+**It is not a social network for watching friends; it is a social network for meeting friends and building relationships.** It prioritizes small, mutually agreed relationships over public self-expression.
+
+## Starting point and hypothesis
+
+For close friends, the frequent need is less about continuously viewing posts and more about choosing the next time to meet, meeting in person, and later revisiting the occasion. Plans scatter across messenger conversations, availability matching becomes repetitive, and shared photos remain in individual albums or chat rooms.
+
+The product hypothesis is that connecting `group → plan → meet → photos and moments → memories` in a small private space can increase the time people spend together in real life rather than the time they spend viewing the app. It brings schedule conversations, location sharing, photo delivery, and album organization into the single context of a meetup.
+
+## Design choices
+
+- Begin with real friends and groups, not exposure to an unknown audience.
+- Prioritize small spaces organized around a purpose and level of closeness over public profiles.
+- Treat a meetup, with participants, candidate times, and a confirmed place, as the primary object rather than a content post.
+- Connect the before and after of a meeting through consent-based arrival status and shared photos.
+- Do not turn follower or like counts into a relationship scoreboard.
+- Keep activity private by default instead of automatically publishing it to a public feed.
+- Follow SwiftUI and Apple HIG conventions for familiar, accessible iOS interactions.
+
+## Core journey
+
+1. Create several groups with friends for different purposes.
+2. Create a meetup in a group and coordinate candidate times and places.
+3. Check each participant's self-reported departure or arrival status on the day.
+4. Share photos and short moments with the meetup.
+5. Revisit the shared moments as memories grouped by meetup.
+
+## What it intentionally avoids
+
+The product does not include algorithmically selected public feeds, follower and like competition, influencer-led reach or advertising feeds, tracking a friend's location or activity without consent, or treating time spent, posting volume, and reactions as measures of relationship health.
+
+## Success criteria
+
+It evaluates whether the time and repeated messages needed to schedule a meetup decrease; whether plans made in the app lead to actual meetings; whether participants collect their photos into one meetup record; and whether they revisit memories later. These are hypotheses for assessing usefulness to relationships, not measures intended to increase public engagement or screen time.
+
+## Current implementation scope
+
+The app currently includes Firebase email/password authentication, Firestore-based multi-group creation and email invitations, shared meetups with selected group members, candidate-time responses with real-time synchronization, and organizer confirmation. Only participants can access a meetup and its availability, and only the organizer can confirm candidates. Participants self-report arrival status on the confirmed meetup day; their location is not tracked.
+
+As of 2026-09-28, Firestore Rules for Firebase project `uri-sai-a8c73` were deployed and verified to match the local `firestore.rules`; seven local Rules tests and an iOS Simulator Debug build passed. Live A/B-account flows, friend-data integration, photo upload, automatic memories, notifications, and account deletion remain to be implemented.
+
+## 한국어
 
 ## 제품 관점
 

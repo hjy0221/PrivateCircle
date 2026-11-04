@@ -6,19 +6,35 @@
 
 PrivateCircle（우리 사이）は、友人との予定を決め、一緒に過ごした時間を思い出として残す、プライベートな関係に焦点を当てた iOS アプリです。
 
+<p align="left">
+  <img src="PrivateCircle/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="128" alt="PrivateCircle app icon">
+</p>
+
+### 日本語版スクリーンショット
+
+<img src="docs/screenshots/home-ja.png" width="260" alt="PrivateCircle Japanese home screen">
+
 ### ねらい
 
 おすすめフィード、広告、フォロワーや「いいね」の競争ではなく、実際に知っている人と予定を立て、会い、その思い出を見つけ直す体験を目指します。[企画背景と MVP 範囲](docs/product-rationale.md)を参照してください。
 
 ### 画面と実行
 
-ログイン、ホーム、グループ、友人、予定、思い出の画面を提供します。スクリーンショットは韓国語セクションにあります。Debug スキームでは Launch Arguments の `--screenshot-preview` と `--screenshot-tab=home|groups|friends|meetups|memories` でサンプルデータの画面を再現できます。
+ログイン、ホーム、グループ、友人、予定、思い出の画面を提供します。Debug スキームでは Launch Arguments の `--screenshot-preview` と `--screenshot-tab=home|groups|friends|meetups|memories` でサンプルデータの画面を再現できます。
 
 セットアップ、Firebase 構成、機能、テスト、プライバシーに関する注意は韓国語セクションに記載しています。
 
 ## English
 
 PrivateCircle (우리 사이) is a private, relationship-centered iOS app for making plans with friends and preserving memories of time together. It focuses on people you know rather than recommendation feeds or competition for followers and likes. See the [product rationale](docs/product-rationale.md).
+
+<p align="left">
+  <img src="PrivateCircle/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="128" alt="PrivateCircle app icon">
+</p>
+
+### English screenshot
+
+<img src="docs/screenshots/home-en.png" width="260" alt="PrivateCircle English home screen">
 
 ### Screenshots and flows
 

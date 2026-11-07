@@ -24,18 +24,18 @@
 
 <table>
   <tr>
-    <td align="center"><strong>ログイン</strong><br><img src="docs/screenshots/login.png" width="180" alt="ログイン画面"></td>
-    <td align="center"><strong>ホーム</strong><br><img src="docs/screenshots/home.png" width="180" alt="ホーム画面"></td>
-    <td align="center"><strong>グループ</strong><br><img src="docs/screenshots/groups.png" width="180" alt="グループリスト画面"></td>
+    <td align="center"><strong>ログイン</strong><br><img src="docs/screenshots/login-ja.png" width="180" alt="ログイン画面"></td>
+    <td align="center"><strong>ホーム</strong><br><img src="docs/screenshots/home-ja.png" width="180" alt="ホーム画面"></td>
+    <td align="center"><strong>グループ</strong><br><img src="docs/screenshots/groups-ja.png" width="180" alt="グループリスト画面"></td>
   </tr>
   <tr>
-    <td align="center"><strong>グループの作成</strong><br><img src="docs/screenshots/group-create.png" width="180" alt="グループ作成画面"></td>
-    <td align="center"><strong>友達</strong><br><img src="docs/screenshots/friends.png" width="180" alt="友達リスト画面"></td>
-    <td align="center"><strong>会議</strong><br><img src="docs/screenshots/meetups.png" width="180" alt="会議リスト画面"></td>
+    <td align="center"><strong>グループの作成</strong><br><img src="docs/screenshots/group-create-ja.png" width="180" alt="グループ作成画面"></td>
+    <td align="center"><strong>友達</strong><br><img src="docs/screenshots/friends-ja.png" width="180" alt="友達リスト画面"></td>
+    <td align="center"><strong>会議</strong><br><img src="docs/screenshots/meetups-ja.png" width="180" alt="会議リスト画面"></td>
   </tr>
   <tr>
-    <td align="center"><strong>会議の作成</strong><br><img src="docs/screenshots/meetup-create.png" width="180" alt="新しい会議作成画面"></td>
-    <td align="center"><strong>思い出</strong><br><img src="docs/screenshots/memories.png" width="180" alt="思い出画面"></td>
+    <td align="center"><strong>会議の作成</strong><br><img src="docs/screenshots/meetup-create-ja.png" width="180" alt="新しい会議作成画面"></td>
+    <td align="center"><strong>思い出</strong><br><img src="docs/screenshots/memories-ja.png" width="180" alt="思い出画面"></td>
   </tr>
 </table>
 
@@ -85,18 +85,18 @@ When recapturing, specify `--screenshot-preview` and `--screenshot-tab=home|grou
 
 <table>
   <tr>
-    <td align="center"><strong>Login</strong><br><img src="docs/screenshots/login.png" width="180" alt="Login screen"></td>
-    <td align="center"><strong>Home</strong><br><img src="docs/screenshots/home.png" width="180" alt="Home screen"></td>
-    <td align="center"><strong>Group</strong><br><img src="docs/screenshots/groups.png" width="180" alt="Group list screen"></td>
+    <td align="center"><strong>Login</strong><br><img src="docs/screenshots/login-en.png" width="180" alt="Login screen"></td>
+    <td align="center"><strong>Home</strong><br><img src="docs/screenshots/home-en.png" width="180" alt="Home screen"></td>
+    <td align="center"><strong>Group</strong><br><img src="docs/screenshots/groups-en.png" width="180" alt="Group list screen"></td>
   </tr>
   <tr>
-    <td align="center"><strong>Create group</strong><br><img src="docs/screenshots/group-create.png" width="180" alt="Group creation screen"></td>
-    <td align="center"><strong>Friends</strong><br><img src="docs/screenshots/friends.png" width="180" alt="Friends list screen"></td>
-    <td align="center"><strong>Meetings</strong><br><img src="docs/screenshots/meetups.png" width="180" alt="Meeting list screen"></td>
+    <td align="center"><strong>Create group</strong><br><img src="docs/screenshots/group-create-en.png" width="180" alt="Group creation screen"></td>
+    <td align="center"><strong>Friends</strong><br><img src="docs/screenshots/friends-en.png" width="180" alt="Friends list screen"></td>
+    <td align="center"><strong>Meetings</strong><br><img src="docs/screenshots/meetups-en.png" width="180" alt="Meeting list screen"></td>
   </tr>
   <tr>
-    <td align="center"><strong>Create a meeting</strong><br><img src="docs/screenshots/meetup-create.png" width="180" alt="New meeting creation screen"></td>
-    <td align="center"><strong>Memories</strong><br><img src="docs/screenshots/memories.png" width="180" alt="Memories screen"></td>
+    <td align="center"><strong>Create a meeting</strong><br><img src="docs/screenshots/meetup-create-en.png" width="180" alt="New meeting creation screen"></td>
+    <td align="center"><strong>Memories</strong><br><img src="docs/screenshots/memories-en.png" width="180" alt="Memories screen"></td>
   </tr>
 </table>
 

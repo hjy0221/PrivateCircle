@@ -53,7 +53,9 @@
 - Firebase Authentication
 - Cloud Firestore
 
-## 現在の実装範囲Firebase メール認証と Firestore グループ作成・メール招待、参加者選択型共同会議、参加者別スケジュール応答・リアルタイム同期・作成者スケジュール確定、会議当日手動到着状態共有が実装されています。 2026-09-28 運用プロジェクト`uri-sai-a8c73`にローカル検証ルールを配布し、`npm run verify:rules:production`で公開内容とローカル`firestore.rules`の一致を確認しました。 Firestore Emulator Rule Test 7とiOS Simulator Debugのビルドも通過しました。読み取り専用運用確認で共有グループ・会議が見つからなかったため、migrationは実行していません。 Authアカウントは1つだけなので、実際のA / B検証は2番目のEメール認証完了アカウントが準備されるまで未完了です。 GPS追跡は行いません。友達リストと思い出は実際のデータにリンクされておらず、共同写真のアップロード、自動思い出、通知、アカウントの削除、リリース操作などの機能は後続のMVPタスクです。
+## 現在の実装範囲
+
+Firebase メール認証と Firestore グループ作成・メール招待、参加者選択型共同会議、参加者別スケジュール応答・リアルタイム同期・作成者スケジュール確定、会議当日手動到着状態共有が実装されています。 2026-09-28 運用プロジェクト`uri-sai-a8c73`にローカル検証ルールを配布し、`npm run verify:rules:production`で公開内容とローカル`firestore.rules`の一致を確認しました。 Firestore Emulator Rule Test 7とiOS Simulator Debugのビルドも通過しました。読み取り専用運用確認で共有グループ・会議が見つからなかったため、migrationは実行していません。 Authアカウントは1つだけなので、実際のA / B検証は2番目のEメール認証完了アカウントが準備されるまで未完了です。 GPS追跡は行いません。友達リストと思い出は実際のデータにリンクされておらず、共同写真のアップロード、自動思い出、通知、アカウントの削除、リリース操作などの機能は後続のMVPタスクです。
 
 ## 実行
 
@@ -114,7 +116,9 @@ When recapturing, specify `--screenshot-preview` and `--screenshot-tab=home|grou
 -Firebase Authentication
 - Cloud Firestore
 
-## Current implementation scopeFirebase email authentication, Firestore group creation, email invitation, participant-selected joint meeting, schedule response for each participant, real-time synchronization, author's schedule confirmation, and manual arrival status sharing on the day of the meeting are implemented. 2026-09-28 Local verification rules were deployed to the operational project `uri-sai-a8c73`, and `npm run verify:rules:production` confirmed that the published content matches local `firestore.rules`. It also passed the 7 Firestore Emulator rule tests and the iOS Simulator Debug build. No shared groups/meetings were found in the read-only operation check, so migration was not executed. Because there is only one Auth account, the actual A/B validation is not complete until the second email-verified account is ready. There is no GPS tracking. Friends list and Memories are not linked to real data, and joint photo uploads, automatic Memories, notifications, account deletion and launch operations features are follow-up MVP efforts.
+## Current implementation scope
+
+Firebase email authentication, Firestore group creation, email invitation, participant-selected joint meeting, schedule response for each participant, real-time synchronization, author's schedule confirmation, and manual arrival status sharing on the day of the meeting are implemented. 2026-09-28 Local verification rules were deployed to the operational project `uri-sai-a8c73`, and `npm run verify:rules:production` confirmed that the published content matches local `firestore.rules`. It also passed the 7 Firestore Emulator rule tests and the iOS Simulator Debug build. No shared groups/meetings were found in the read-only operation check, so migration was not executed. Because there is only one Auth account, the actual A/B validation is not complete until the second email-verified account is ready. There is no GPS tracking. Friends list and Memories are not linked to real data, and joint photo uploads, automatic Memories, notifications, account deletion and launch operations features are follow-up MVP efforts.
 
 ## run
 

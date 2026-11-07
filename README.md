@@ -14,6 +14,25 @@ PrivateCircle（우리 사이）は、友人との予定を決め、一緒に過
 
 <img src="docs/screenshots/home-ja.png" width="260" alt="PrivateCircle Japanese home screen">
 
+### 全画面
+
+<table>
+  <tr>
+    <td align="center"><strong>ログイン</strong><br><img src="docs/screenshots/login.png" width="180" alt="ログイン screen"></td>
+    <td align="center"><strong>ホーム</strong><br><img src="docs/screenshots/home.png" width="180" alt="ホーム screen"></td>
+    <td align="center"><strong>グループ</strong><br><img src="docs/screenshots/groups.png" width="180" alt="グループ screen"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>グループ作成</strong><br><img src="docs/screenshots/group-create.png" width="180" alt="グループ作成 screen"></td>
+    <td align="center"><strong>友だち</strong><br><img src="docs/screenshots/friends.png" width="180" alt="友だち screen"></td>
+    <td align="center"><strong>予定</strong><br><img src="docs/screenshots/meetups.png" width="180" alt="予定 screen"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>予定作成</strong><br><img src="docs/screenshots/meetup-create.png" width="180" alt="予定作成 screen"></td>
+    <td align="center"><strong>思い出</strong><br><img src="docs/screenshots/memories.png" width="180" alt="思い出 screen"></td>
+  </tr>
+</table>
+
 ### ねらい
 
 おすすめフィード、広告、フォロワーや「いいね」の競争ではなく、実際に知っている人と予定を立て、会い、その思い出を見つけ直す体験を目指します。[企画背景と MVP 範囲](docs/product-rationale.md)を参照してください。
@@ -35,6 +54,25 @@ PrivateCircle (우리 사이) is a private, relationship-centered iOS app for ma
 ### English screenshot
 
 <img src="docs/screenshots/home-en.png" width="260" alt="PrivateCircle English home screen">
+
+### All screens
+
+<table>
+  <tr>
+    <td align="center"><strong>Login</strong><br><img src="docs/screenshots/login.png" width="180" alt="Login screen"></td>
+    <td align="center"><strong>Home</strong><br><img src="docs/screenshots/home.png" width="180" alt="Home screen"></td>
+    <td align="center"><strong>Groups</strong><br><img src="docs/screenshots/groups.png" width="180" alt="Groups screen"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Create group</strong><br><img src="docs/screenshots/group-create.png" width="180" alt="Create group screen"></td>
+    <td align="center"><strong>Friends</strong><br><img src="docs/screenshots/friends.png" width="180" alt="Friends screen"></td>
+    <td align="center"><strong>Meetups</strong><br><img src="docs/screenshots/meetups.png" width="180" alt="Meetups screen"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Create meetup</strong><br><img src="docs/screenshots/meetup-create.png" width="180" alt="Create meetup screen"></td>
+    <td align="center"><strong>Memories</strong><br><img src="docs/screenshots/memories.png" width="180" alt="Memories screen"></td>
+  </tr>
+</table>
 
 ### Screenshots and flows
 

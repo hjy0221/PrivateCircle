@@ -4,93 +4,125 @@
 
 ## 日本語
 
-PrivateCircle（우리 사이）は、友人との予定を決め、一緒に過ごした時間を思い出として残す、プライベートな関係に焦点を当てた iOS アプリです。
+友達との約束を決めて、一緒にした時間を思い出に残すプライベート関係中心のiOSアプリです。
 
 <p align="left">
-  <img src="PrivateCircle/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="128" alt="PrivateCircle app icon">
+  <img src="PrivateCircle/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="128" alt="私たちの間のアプリのアイコン">
 </p>
 
-### 日本語版スクリーンショット
+## 企画理由
 
-<img src="docs/screenshots/home-ja.png" width="260" alt="PrivateCircle Japanese home screen">
+現在、ほとんどのSNSが友達とニュースを分ける機能を超えて、おすすめコンテンツや広告、有名インフルエンサーのコンテンツを消費する空間に拡張されているという問題意識から出発しました。私たちの間は、公的な反応を集めるのではなく、実際に知っている人と約束を決め、会い、一緒にした瞬間を再発見するのを助けます。フォロワー・いいね 競争とおすすめフィードは商品目標から除外します。
 
-### 全画面
+[企画背景、設計原則、MVP範囲を読む](docs/product-rationale.md)
+
+## アプリ画面
+
+以下の画面は、デバッグプレビューでサンプルデータとしてキャプチャしました。グループ画面も例のグループを使用し、Firebaseアカウントやサーバーデータを変更しません。
+
+再キャプチャするときは、Debug スキームの Launch Arguments に `--screenshot-preview` と `--screenshot-tab=home|groups|friends|meetups|memories` を指定します。グループ作成シートは`--screenshot-group-create`、会議作成シートは`--screenshot-tab=meetups`と`--screenshot-meetup-create`も追加します。
 
 <table>
   <tr>
-    <td align="center"><strong>ログイン</strong><br><img src="docs/screenshots/login.png" width="180" alt="ログイン screen"></td>
-    <td align="center"><strong>ホーム</strong><br><img src="docs/screenshots/home.png" width="180" alt="ホーム screen"></td>
-    <td align="center"><strong>グループ</strong><br><img src="docs/screenshots/groups.png" width="180" alt="グループ screen"></td>
+    <td align="center"><strong>ログイン</strong><br><img src="docs/screenshots/login.png" width="180" alt="ログイン画面"></td>
+    <td align="center"><strong>ホーム</strong><br><img src="docs/screenshots/home.png" width="180" alt="ホーム画面"></td>
+    <td align="center"><strong>グループ</strong><br><img src="docs/screenshots/groups.png" width="180" alt="グループリスト画面"></td>
   </tr>
   <tr>
-    <td align="center"><strong>グループ作成</strong><br><img src="docs/screenshots/group-create.png" width="180" alt="グループ作成 screen"></td>
-    <td align="center"><strong>友だち</strong><br><img src="docs/screenshots/friends.png" width="180" alt="友だち screen"></td>
-    <td align="center"><strong>予定</strong><br><img src="docs/screenshots/meetups.png" width="180" alt="予定 screen"></td>
+    <td align="center"><strong>グループの作成</strong><br><img src="docs/screenshots/group-create.png" width="180" alt="グループ作成画面"></td>
+    <td align="center"><strong>友達</strong><br><img src="docs/screenshots/friends.png" width="180" alt="友達リスト画面"></td>
+    <td align="center"><strong>会議</strong><br><img src="docs/screenshots/meetups.png" width="180" alt="会議リスト画面"></td>
   </tr>
   <tr>
-    <td align="center"><strong>予定作成</strong><br><img src="docs/screenshots/meetup-create.png" width="180" alt="予定作成 screen"></td>
-    <td align="center"><strong>思い出</strong><br><img src="docs/screenshots/memories.png" width="180" alt="思い出 screen"></td>
+    <td align="center"><strong>会議の作成</strong><br><img src="docs/screenshots/meetup-create.png" width="180" alt="新しい会議作成画面"></td>
+    <td align="center"><strong>思い出</strong><br><img src="docs/screenshots/memories.png" width="180" alt="思い出画面"></td>
   </tr>
 </table>
 
-### ねらい
+## メインフロー
 
-おすすめフィード、広告、フォロワーや「いいね」の競争ではなく、実際に知っている人と予定を立て、会い、その思い出を見つけ直す体験を目指します。[企画背景と MVP 範囲](docs/product-rationale.md)を参照してください。
+- 友達や複数のグループを作成し、電子メールで招待
+- グループメンバーのうち参加者を選んで集まりとスケジュール候補を生成
+- 参加者別の可能時間を保存し、会議画面でリアルタイムで応答を確認
+- 会議の作成者が候補時間を最終確定
+- おすすめフィード、フォロワー数、いいね数を中心に置かない関係経験
 
-### 画面と実行
+## 技術構成
 
-ログイン、ホーム、グループ、友人、予定、思い出の画面を提供します。Debug スキームでは Launch Arguments の `--screenshot-preview` と `--screenshot-tab=home|groups|friends|meetups|memories` でサンプルデータの画面を再現できます。
+- SwiftUI、iOS 17以降
+- Firebase Authentication
+- Cloud Firestore
 
-セットアップ、Firebase 構成、機能、テスト、プライバシーに関する注意は韓国語セクションに記載しています。
+## 現在の実装範囲Firebase メール認証と Firestore グループ作成・メール招待、参加者選択型共同会議、参加者別スケジュール応答・リアルタイム同期・作成者スケジュール確定、会議当日手動到着状態共有が実装されています。 2026-09-28 運用プロジェクト`uri-sai-a8c73`にローカル検証ルールを配布し、`npm run verify:rules:production`で公開内容とローカル`firestore.rules`の一致を確認しました。 Firestore Emulator Rule Test 7とiOS Simulator Debugのビルドも通過しました。読み取り専用運用確認で共有グループ・会議が見つからなかったため、migrationは実行していません。 Authアカウントは1つだけなので、実際のA / B検証は2番目のEメール認証完了アカウントが準備されるまで未完了です。 GPS追跡は行いません。友達リストと思い出は実際のデータにリンクされておらず、共同写真のアップロード、自動思い出、通知、アカウントの削除、リリース操作などの機能は後続のMVPタスクです。
+
+## 実行
+
+1. `PrivateCircle.xcodeproj`をXcodeで開きます。
+2. `PrivateCircle`スキームとiOSシミュレータまたは接続機器を選択します。
+3. ビルド後に実行します。
+
+Firebase機能を使用するには、プロジェクトに適した`GoogleService-Info.plist`とFirebase Consoleの設定が必要です。デフォルトのFirebaseプロジェクトは`.firebaserc`に固定されています。運用ルールを公開する前に`npm run test:rules`とターゲットプロジェクトを再確認し、`npm run login:firebase`で直接認証して`npm run deploy:rules:production`を実行します。次に、`npm run verify:rules:production`として公開されたデフォルトのデータベースルールとローカルファイルの一致を確認します。これらのコマンドはリポジトリ外の書き込み可能なCLI設定パスを使用し、展開コマンドは`uri-sai-a8c73`のFirestore Rulesのみを対象としています。このリポジトリのルールは自動配布されません。現在の運用データでグループ・共同会議が見つからないため、migrationは不要で、過去のレコードが確認された場合は、参加者の検証と既存の参照保存を含むidempotent backfill手順を最初にdry-runで行う必要があります。
 
 ## English
 
-PrivateCircle (우리 사이) is a private, relationship-centered iOS app for making plans with friends and preserving memories of time together. It focuses on people you know rather than recommendation feeds or competition for followers and likes. See the [product rationale](docs/product-rationale.md).
+It is a private relationship-centered iOS app that allows you to make appointments with friends and make memories of the time spent together.
 
 <p align="left">
-  <img src="PrivateCircle/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="128" alt="PrivateCircle app icon">
+  <img src="PrivateCircle/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="128" alt="Between Us App Icon">
 </p>
 
-### English screenshot
+## Reason for planning
 
-<img src="docs/screenshots/home-en.png" width="260" alt="PrivateCircle English home screen">
+It started from the awareness that most SNSs are currently expanding beyond the function of sharing news with friends to a space for consuming recommended content, advertisements, and content from famous influencers. Instead of collecting public reactions, Among Us helps you make appointments and meet up with people you actually know and relive the moments you have together. Follower/like competition and recommendation feeds are excluded from product goals.
 
-### All screens
+[Read the planning background, design principles, and MVP scope](docs/product-rationale.md)
+
+## App screen
+
+The screen below was captured with sample data from the Debug preview. The Groups screen also uses example groups and doesn't change any Firebase account or server data.
+
+When recapturing, specify `--screenshot-preview` and `--screenshot-tab=home|groups|friends|meetups|memories` in the Launch Arguments of the Debug scheme. Also add `--screenshot-group-create` to the group creation sheet and `--screenshot-tab=meetups` and `--screenshot-meetup-create` to the meeting creation sheet.
 
 <table>
   <tr>
     <td align="center"><strong>Login</strong><br><img src="docs/screenshots/login.png" width="180" alt="Login screen"></td>
     <td align="center"><strong>Home</strong><br><img src="docs/screenshots/home.png" width="180" alt="Home screen"></td>
-    <td align="center"><strong>Groups</strong><br><img src="docs/screenshots/groups.png" width="180" alt="Groups screen"></td>
+    <td align="center"><strong>Group</strong><br><img src="docs/screenshots/groups.png" width="180" alt="Group list screen"></td>
   </tr>
   <tr>
-    <td align="center"><strong>Create group</strong><br><img src="docs/screenshots/group-create.png" width="180" alt="Create group screen"></td>
-    <td align="center"><strong>Friends</strong><br><img src="docs/screenshots/friends.png" width="180" alt="Friends screen"></td>
-    <td align="center"><strong>Meetups</strong><br><img src="docs/screenshots/meetups.png" width="180" alt="Meetups screen"></td>
+    <td align="center"><strong>Create group</strong><br><img src="docs/screenshots/group-create.png" width="180" alt="Group creation screen"></td>
+    <td align="center"><strong>Friends</strong><br><img src="docs/screenshots/friends.png" width="180" alt="Friends list screen"></td>
+    <td align="center"><strong>Meetings</strong><br><img src="docs/screenshots/meetups.png" width="180" alt="Meeting list screen"></td>
   </tr>
   <tr>
-    <td align="center"><strong>Create meetup</strong><br><img src="docs/screenshots/meetup-create.png" width="180" alt="Create meetup screen"></td>
+    <td align="center"><strong>Create a meeting</strong><br><img src="docs/screenshots/meetup-create.png" width="180" alt="New meeting creation screen"></td>
     <td align="center"><strong>Memories</strong><br><img src="docs/screenshots/memories.png" width="180" alt="Memories screen"></td>
   </tr>
 </table>
 
-### Screenshots and flows
+## Main flow
 
-The screenshots above use sample data in Debug previews; the group examples do not modify Firebase accounts or server data. To recapture them, use the Debug scheme with `--screenshot-preview` and `--screenshot-tab=home|groups|friends|meetups|memories`. Add `--screenshot-group-create` for the group creation sheet, or `--screenshot-tab=meetups` and `--screenshot-meetup-create` for the meetup creation sheet.
+- Create multiple groups with friends and invite them by email
+- Select participants from group members to create meeting and schedule candidates
+- Save the available time for each participant and check responses in real time on the meeting screen
+- The person who created the meeting finalizes the candidate time.
+- A relationship experience that doesn't center around recommendation feeds, follower counts, or likes
 
-Users can create groups and invite friends by email, select participants and propose meetup times, save availability and see responses in real time, and have the meetup creator finalize a time. The product does not center recommendations, follower counts, or likes.
+## Technical configuration
 
-### Technology and current scope
+- SwiftUI, iOS 17 or higher
+-Firebase Authentication
+- Cloud Firestore
 
-The app uses SwiftUI, iOS 17+, Firebase Authentication, and Cloud Firestore. Implemented features include email authentication, group creation and email invitations, shared meetups with selected participants, individual availability responses and real-time synchronization, creator confirmation, and manual arrival-status sharing on the day. There is no GPS tracking.
+## Current implementation scopeFirebase email authentication, Firestore group creation, email invitation, participant-selected joint meeting, schedule response for each participant, real-time synchronization, author's schedule confirmation, and manual arrival status sharing on the day of the meeting are implemented. 2026-09-28 Local verification rules were deployed to the operational project `uri-sai-a8c73`, and `npm run verify:rules:production` confirmed that the published content matches local `firestore.rules`. It also passed the 7 Firestore Emulator rule tests and the iOS Simulator Debug build. No shared groups/meetings were found in the read-only operation check, so migration was not executed. Because there is only one Auth account, the actual A/B validation is not complete until the second email-verified account is ready. There is no GPS tracking. Friends list and Memories are not linked to real data, and joint photo uploads, automatic Memories, notifications, account deletion and launch operations features are follow-up MVP efforts.
 
-On 2026-09-28, locally verified Firestore Rules were deployed to `uri-sai-a8c73` and `npm run verify:rules:production` confirmed the published rules matched `firestore.rules`. Seven Firestore Emulator rule tests and an iOS Simulator Debug build passed. Read-only production inspection found no shared groups or meetups, so no migration was run. Actual two-user A/B verification remains incomplete until a second email-verified account is available. Friends and memories are not connected to real data; shared photo uploads, automatic memories, notifications, account deletion, and release operations remain future MVP work.
+## run
 
-### Run and Firebase
+1. Open `PrivateCircle.xcodeproj` in Xcode.
+2. Select the `PrivateCircle` scheme and the iOS simulator or connected device.
+3. Build and run.
 
-Open `PrivateCircle.xcodeproj` in Xcode, select the `PrivateCircle` scheme and a simulator or connected device, then build and run. Firebase requires a suitable `GoogleService-Info.plist` and Firebase Console configuration. The default Firebase project is fixed in `.firebaserc`.
-
-Before publishing rules, run `npm run test:rules`, recheck the target project, authenticate with `npm run login:firebase`, and run `npm run deploy:rules:production`; then run `npm run verify:rules:production` to compare the published default database rules with the local file. These commands use writable CLI configuration outside the repository; deployment targets only the Firestore Rules of `uri-sai-a8c73`, and rules are not deployed automatically. If older records are found, first dry-run an idempotent backfill that validates participants and preserves existing references.
+To use Firebase features, you need `GoogleService-Info.plist` and Firebase Console settings appropriate for your project. The default Firebase project is anchored at `.firebaserc`. Before posting operational rules, check again `npm run test:rules` and the target project, authenticate directly with `npm run login:firebase`, and then run `npm run deploy:rules:production`. Next, we check that the local file matches the default database Rules published as `npm run verify:rules:production`. These commands use a writable CLI setup path outside of the repository, and the deployment commands only target Firestore Rules in `uri-sai-a8c73`. Rules in this repository are not automatically deployed. Migration is unnecessary as no group/communal gatherings are found in the current operational data, and if past records are identified, an idempotent backfill procedure, including verification of participants and preservation of existing references, must first be performed as a dry-run.
 
 ## 한국어
 
